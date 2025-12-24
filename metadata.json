@@ -1,0 +1,5 @@
+{
+  "name": "AiItem RAG Architect",
+  "description": "A visual interface for managing, vectorizing, and querying Python codebases using the AiItem RAG architecture.",
+  "requestFramePermissions": []
+}

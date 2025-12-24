@@ -1,0 +1,77 @@
+{
+  "name": "@aiitem/ui-components",
+  "version": "1.0.0",
+  "description": "Reusable UI components for AiItem RAG architecture projects",
+  "type": "module",
+  "main": "dist/lib/index.js",
+  "module": "dist/lib/index.esm.js",
+  "types": "dist/lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib/index.esm.js",
+      "require": "./dist/lib/index.js",
+      "types": "./dist/lib/types/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/lib",
+    "lib",
+    "components",
+    "services",
+    "types.ts",
+    "constants.ts"
+  ],
+  "keywords": [
+    "rag",
+    "ai",
+    "codebase-analysis",
+    "react",
+    "typescript",
+    "knowledge-graph"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "server": "node backend/server.js",
+    "backend": "node backend/server.js",
+    "build": "vite build",
+    "build:lib": "rollup -c",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build:lib"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "dependencies": {
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "chromadb": "^3.1.5",
+    "d3": "^7.9.0",
+    "express": "^4.18.2",
+    "faiss-node": "^0.5.1",
+    "glob": "^13.0.0",
+    "lucide-react": "^0.562.0",
+    "minimatch": "^10.1.1",
+    "openai": "^6.9.1",
+    "react-syntax-highlighter": "^16.1.0",
+    "recharts": "^3.4.1",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "uuid": "^13.0.0"
+  },
+  "optionalDependencies": {
+    "@google/genai": "^1.30.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/d3": "^7.4.3",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "rollup": "^4.9.6",
+    "rollup-plugin-peer-deps-external": "^2.2.4",
+    "typescript": "~5.8.2",
+    "vite": "^7.2.4"
+  }
+}

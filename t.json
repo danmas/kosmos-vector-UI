@@ -1,0 +1,514 @@
+[
+  {
+    "path": "./",
+    "name": "aiitem-rag-architect",
+    "type": "directory",
+    "size": 0,
+    "selected": true,
+    "children": [
+      {
+        "path": "./",
+        "name": "App.tsx",
+        "type": "file",
+        "size": 9123,
+        "selected": true,
+        "language": "typescript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "backend",
+        "type": "directory",
+        "size": 0,
+        "selected": true,
+        "children": [
+          {
+            "path": "./",
+            "name": "config",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": []
+          },
+          {
+            "path": "./",
+            "name": "middleware",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": [
+              {
+                "path": "./",
+                "name": "contractValidator.js",
+                "type": "file",
+                "size": 10837,
+                "selected": true,
+                "language": "javascript",
+                "error": false
+              }
+            ]
+          },
+          {
+            "path": "./",
+            "name": "pipeline",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": [
+              {
+                "path": "./",
+                "name": "analyzers",
+                "type": "directory",
+                "size": 0,
+                "selected": true,
+                "children": [
+                  {
+                    "path": "./",
+                    "name": "DependencyAnalyzer.js",
+                    "type": "file",
+                    "size": 18489,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  }
+                ]
+              },
+              {
+                "path": "./",
+                "name": "enrichers",
+                "type": "directory",
+                "size": 0,
+                "selected": true,
+                "children": [
+                  {
+                    "path": "./",
+                    "name": "SemanticEnricher.js",
+                    "type": "file",
+                    "size": 14963,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  }
+                ]
+              },
+              {
+                "path": "./",
+                "name": "ErrorHandler.js",
+                "type": "file",
+                "size": 8689,
+                "selected": true,
+                "language": "javascript",
+                "error": false
+              },
+              {
+                "path": "./",
+                "name": "indexers",
+                "type": "directory",
+                "size": 0,
+                "selected": true,
+                "children": [
+                  {
+                    "path": "./",
+                    "name": "IndexBuilder.js",
+                    "type": "file",
+                    "size": 15203,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  }
+                ]
+              },
+              {
+                "path": "./",
+                "name": "parsers",
+                "type": "directory",
+                "size": 0,
+                "selected": true,
+                "children": [
+                  {
+                    "path": "./",
+                    "name": "BaseParser.js",
+                    "type": "file",
+                    "size": 5083,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  },
+                  {
+                    "path": "./",
+                    "name": "GoParser.js",
+                    "type": "file",
+                    "size": 15994,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  },
+                  {
+                    "path": "./",
+                    "name": "index.js",
+                    "type": "file",
+                    "size": 2148,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  },
+                  {
+                    "path": "./",
+                    "name": "JavaParser.js",
+                    "type": "file",
+                    "size": 21143,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  },
+                  {
+                    "path": "./",
+                    "name": "PythonParser.js",
+                    "type": "file",
+                    "size": 10776,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  },
+                  {
+                    "path": "./",
+                    "name": "TypeScriptParser.js",
+                    "type": "file",
+                    "size": 17754,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  }
+                ]
+              },
+              {
+                "path": "./",
+                "name": "PipelineManager.js",
+                "type": "file",
+                "size": 17788,
+                "selected": true,
+                "language": "javascript",
+                "error": false
+              },
+              {
+                "path": "./",
+                "name": "ProgressTracker.js",
+                "type": "file",
+                "size": 10725,
+                "selected": true,
+                "language": "javascript",
+                "error": false
+              },
+              {
+                "path": "./",
+                "name": "StepExecutor.js",
+                "type": "file",
+                "size": 15908,
+                "selected": true,
+                "language": "javascript",
+                "error": false
+              },
+              {
+                "path": "./",
+                "name": "vectorizers",
+                "type": "directory",
+                "size": 0,
+                "selected": true,
+                "children": [
+                  {
+                    "path": "./",
+                    "name": "Vectorizer.js",
+                    "type": "file",
+                    "size": 13868,
+                    "selected": true,
+                    "language": "javascript",
+                    "error": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": "./",
+            "name": "server.js",
+            "type": "file",
+            "size": 48210,
+            "selected": true,
+            "language": "javascript",
+            "error": false
+          }
+        ]
+      },
+      {
+        "path": "./",
+        "name": "components",
+        "type": "directory",
+        "size": 0,
+        "selected": true,
+        "children": [
+          {
+            "path": "./",
+            "name": "ChatInterface.tsx",
+            "type": "file",
+            "size": 9203,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "Dashboard.tsx",
+            "type": "file",
+            "size": 5798,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "FileExplorer.tsx",
+            "type": "file",
+            "size": 17775,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "Inspector.tsx",
+            "type": "file",
+            "size": 12267,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "KnowledgeGraph.tsx",
+            "type": "file",
+            "size": 7572,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "LogViewer.tsx",
+            "type": "file",
+            "size": 5454,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "PipelineView.tsx",
+            "type": "file",
+            "size": 11461,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "ServerLogsDialog.tsx",
+            "type": "file",
+            "size": 11195,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "Sidebar.tsx",
+            "type": "file",
+            "size": 2723,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          }
+        ]
+      },
+      {
+        "path": "./",
+        "name": "constants.ts",
+        "type": "file",
+        "size": 5175,
+        "selected": true,
+        "language": "typescript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "index.tsx",
+        "type": "file",
+        "size": 363,
+        "selected": true,
+        "language": "typescript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "lib",
+        "type": "directory",
+        "size": 0,
+        "selected": true,
+        "children": [
+          {
+            "path": "./",
+            "name": "context",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": [
+              {
+                "path": "./",
+                "name": "AiItemContext.tsx",
+                "type": "file",
+                "size": 1741,
+                "selected": true,
+                "language": "typescript",
+                "error": false
+              }
+            ]
+          },
+          {
+            "path": "./",
+            "name": "example.tsx",
+            "type": "file",
+            "size": 4255,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "hooks",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": [
+              {
+                "path": "./",
+                "name": "useAiItems.ts",
+                "type": "file",
+                "size": 4742,
+                "selected": true,
+                "language": "typescript",
+                "error": false
+              }
+            ]
+          },
+          {
+            "path": "./",
+            "name": "index.ts",
+            "type": "file",
+            "size": 1122,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          }
+        ]
+      },
+      {
+        "path": "./",
+        "name": "rollup.config.js",
+        "type": "file",
+        "size": 987,
+        "selected": true,
+        "language": "javascript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "server.js",
+        "type": "file",
+        "size": 150,
+        "selected": true,
+        "language": "javascript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "services",
+        "type": "directory",
+        "size": 0,
+        "selected": true,
+        "children": [
+          {
+            "path": "./",
+            "name": "apiClient.ts",
+            "type": "file",
+            "size": 14117,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "contractValidator.ts",
+            "type": "file",
+            "size": 10655,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          },
+          {
+            "path": "./",
+            "name": "geminiService.ts",
+            "type": "file",
+            "size": 2586,
+            "selected": true,
+            "language": "typescript",
+            "error": false
+          }
+        ]
+      },
+      {
+        "path": "./",
+        "name": "src",
+        "type": "directory",
+        "size": 0,
+        "selected": true,
+        "children": [
+          {
+            "path": "./",
+            "name": "components",
+            "type": "directory",
+            "size": 0,
+            "selected": true,
+            "children": [
+              {
+                "path": "./",
+                "name": "PipelineMonitor.tsx",
+                "type": "file",
+                "size": 24105,
+                "selected": true,
+                "language": "typescript",
+                "error": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "./",
+        "name": "types.ts",
+        "type": "file",
+        "size": 1298,
+        "selected": true,
+        "language": "typescript",
+        "error": false
+      },
+      {
+        "path": "./",
+        "name": "vite.config.ts",
+        "type": "file",
+        "size": 303,
+        "selected": true,
+        "language": "typescript",
+        "error": false
+      }
+    ]
+  }
+]

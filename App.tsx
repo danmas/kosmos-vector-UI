@@ -323,7 +323,7 @@ const AppContent: React.FC = () => {
           </div>
         );
       case AppView.PIPELINE:
-        return <PipelineView />;
+        return <PipelineView onOpenLogs={() => setIsLogsDialogOpen(true)} />;
       case AppView.INSPECTOR:
         return <Inspector />;
       case AppView.GRAPH:

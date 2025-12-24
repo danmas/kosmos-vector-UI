@@ -19,7 +19,11 @@ const STEP_LABELS: Record<number, string> = {
   5: 'Index Construction'
 };
 
-const PipelineView: React.FC = () => {
+interface PipelineViewProps {
+  onOpenLogs?: () => void;
+}
+
+const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
   const { invalidate, prefetchAll } = useDataCache();
   const [isRunning, setIsRunning] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>([
@@ -112,6 +116,9 @@ const PipelineView: React.FC = () => {
     if (loadingSteps.has(stepId)) {
       return;
     }
+
+    // Открываем диалог логов при старте
+    onOpenLogs?.();
 
     setLoadingSteps(prev => new Set(prev).add(stepId));
     

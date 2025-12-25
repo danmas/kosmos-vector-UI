@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileNode, ProjectFile, KnowledgeBaseConfig } from '../types';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from '../services/apiClient';
+import { minimatch } from 'minimatch';
 
 interface FileExplorerProps {
   // Обратная совместимость
@@ -39,6 +40,66 @@ const isDirectory = (node: TreeNode): boolean => {
 
 const getNodeSize = (node: TreeNode): number => {
   return 'size' in node ? node.size : 0;
+};
+
+// Функция для проверки соответствия пути glob-паттернам
+const matchesPattern = (filePath: string, patterns: string[], debug = false): boolean => {
+  if (!patterns || patterns.length === 0) {
+    return true; // Если паттернов нет, всё соответствует
+  }
+  
+  // Нормализуем путь: убираем ./ в начале и приводим к единому формату
+  const normalizedPath = filePath.replace(/^\.\//, '').replace(/\\/g, '/');
+  
+  return patterns.some(pattern => {
+    const trimmedPattern = pattern.trim();
+    if (!trimmedPattern) return false;
+    
+    // Проверяем соответствие с нормализованным путём
+    // Также проверяем по имени файла отдельно для паттернов типа *.sql
+    const fileName = normalizedPath.split('/').pop() || '';
+    
+    const matchesFullPath = minimatch(normalizedPath, trimmedPattern, { dot: true });
+    const matchesFileName = minimatch(fileName, trimmedPattern, { dot: true });
+    
+    if (debug && (matchesFullPath || matchesFileName)) {
+      console.log(`[matchesPattern] "${normalizedPath}" matches "${trimmedPattern}" (fullPath: ${matchesFullPath}, fileName: ${matchesFileName})`);
+    }
+    
+    return matchesFullPath || matchesFileName;
+  });
+};
+
+// Функция для применения маски к дереву файлов и получения списка выбранных
+const applyMaskToTree = (
+  nodes: TreeNode[],
+  includePatterns: string[],
+  ignorePatterns: string[]
+): Set<string> => {
+  const selectedFiles = new Set<string>();
+  
+  const processNode = (node: TreeNode) => {
+    const nodeId = getNodeId(node);
+    const isDir = isDirectory(node);
+    
+    if (!isDir) {
+      // Для файлов: проверяем соответствие маскам
+      const matchesInclude = matchesPattern(nodeId, includePatterns, true);
+      const matchesIgnore = ignorePatterns.length > 0 && matchesPattern(nodeId, ignorePatterns, false);
+      
+      if (matchesInclude && !matchesIgnore) {
+        selectedFiles.add(nodeId);
+      }
+    }
+    
+    // Рекурсивно обрабатываем дочерние элементы
+    if (node.children) {
+      node.children.forEach(processNode);
+    }
+  };
+  
+  nodes.forEach(processNode);
+  return selectedFiles;
 };
 
 // Recursive component for the tree (universal for FileNode and ProjectFile)
@@ -149,8 +210,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       } else {
         setPathInput(result.data.targetPath || './');
       }
-      setMask(result.data.includeMask || '**/*.{py,js,ts,tsx,go,java}');
-      setIgnore(result.data.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*');
+      const loadedMask = result.data.includeMask || '**/*.{py,js,ts,tsx,go,java}';
+      const loadedIgnore = result.data.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*';
+      
+      setMask(loadedMask);
+      setIgnore(loadedIgnore);
       setCustomSettings(result.data.metadata?.custom_settings || '');
       
       console.log('[KB Config v2.1.1] Configuration loaded successfully');
@@ -170,9 +234,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         const data = await response.json();
         if (data.success && data.config) {
           setPathInput(data.config.rootPath || data.config.targetPath || './');
-          setMask(data.config.includeMask || '**/*.{py,js,ts,tsx,go,java}');
-          setIgnore(data.config.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*');
+          const loadedMask = data.config.includeMask || '**/*.{py,js,ts,tsx,go,java}';
+          const loadedIgnore = data.config.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*';
+          
+          setMask(loadedMask);
+          setIgnore(loadedIgnore);
           setCustomSettings(data.config.metadata?.custom_settings || '');
+          
           console.log('[KB Config] Loaded configuration from server');
         }
       } else {
@@ -301,6 +369,33 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [standalone, kbConfig?.rootPath, pathInput, isConfigLoaded]);
 
+  // Локальное применение маски при изменении mask или ignore (с debounce)
+  // Маска ВСЕГДА применяется при изменении — это переключает на "Режим 2 (glob-маски)"
+  useEffect(() => {
+    if (!standalone || !isConfigLoaded || files.length === 0) {
+      return;
+    }
+    
+    // Debounce 300ms для применения маски
+    const timeoutId = setTimeout(() => {
+      console.log('[FileExplorer] Applying mask locally:', mask);
+      
+      // Парсим паттерны
+      const includePatterns = mask.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      const ignorePatterns = ignore.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      
+      console.log('[FileExplorer] Include patterns:', includePatterns);
+      
+      // Применяем маску локально
+      const newSelection = applyMaskToTree(files, includePatterns, ignorePatterns);
+      setCheckedFiles(newSelection);
+      
+      console.log('[FileExplorer] Selected files after mask:', newSelection.size, Array.from(newSelection).slice(0, 5));
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  }, [mask, ignore, standalone, isConfigLoaded, files]);
+
   useEffect(() => {
     if (!standalone) {
       if (currentPath) {
@@ -312,9 +407,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   }, [currentPath, standalone]);
 
-  // Инициализируем выбранные файлы при загрузке нового дерева (универсальный для FileNode и ProjectFile)
+  // Инициализируем выбранные файлы при загрузке нового дерева
   useEffect(() => {
-    if (files.length > 0) {
+    if (files.length > 0 && standalone) {
+      // v2.1.1: Приоритет fileSelection над маской
+      if (kbConfig?.fileSelection && kbConfig.fileSelection.length > 0) {
+        // Режим 1: Точный выбор — используем fileSelection
+        console.log('[FileExplorer] Using fileSelection from config:', kbConfig.fileSelection.length, 'files');
+        const kbSelection = new Set(kbConfig.fileSelection);
+        setCheckedFiles(kbSelection);
+      } else {
+        // Режим 2: Glob-маски — применяем маску локально
+        console.log('[FileExplorer] Applying includeMask locally on tree load');
+        const includePatterns = mask.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        const ignorePatterns = ignore.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        
+        const newSelection = applyMaskToTree(files, includePatterns, ignorePatterns);
+        setCheckedFiles(newSelection);
+        
+        console.log('[FileExplorer] Selected files after mask:', newSelection.size);
+      }
+      
+    } else if (files.length > 0 && !standalone) {
+      // Legacy режим: используем checked/selected из дерева
       const initialChecked = new Set<string>();
       const collectInitialChecked = (nodes: TreeNode[]) => {
         nodes.forEach(node => {
@@ -331,12 +446,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       };
       collectInitialChecked(files);
       setCheckedFiles(initialChecked);
-      
-      // v2.1.1: При загрузке файлов в standalone режиме, синхронизируем с fileSelection из конфигурации
-      if (standalone && kbConfig?.fileSelection && kbConfig.fileSelection.length > 0) {
-        const kbSelection = new Set(kbConfig.fileSelection);
-        setCheckedFiles(kbSelection);
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, standalone, kbConfig?.fileSelection]);
@@ -372,22 +481,27 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return () => clearTimeout(timeoutId);
   }, [pathInput, mask, ignore, customSettings, isConfigLoaded]);
 
-  // Автоматическое обновление при изменении паттернов (debounce 500ms)
+  // Автоматическое обновление при изменении паттернов (debounce 500ms) — только для legacy режима
   useEffect(() => {
+    // Пропускаем в standalone режиме — там маска применяется локально
+    if (standalone) {
+      return;
+    }
+    
     // Не обновляем автоматически при первой загрузке или до загрузки конфигурации
-    if (files.length === 0 || !pathInput || isLoading || !isConfigLoaded) {
+    if (files.length === 0 || !pathInput || isLoading || !isConfigLoaded || !onScan) {
       return;
     }
 
     const timeoutId = setTimeout(() => {
-      if (pathInput && !isLoading) {
+      if (pathInput && !isLoading && onScan) {
         onScan(pathInput, mask, ignore);
       }
     }, 500); // 500ms debounce для обновления
 
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mask, ignore, pathInput, isConfigLoaded]); // Добавляем isConfigLoaded в зависимости
+  }, [mask, ignore, pathInput, isConfigLoaded, standalone, onScan]); // Добавляем standalone и onScan в зависимости
 
   // Обработка Escape для закрытия диалога
   useEffect(() => {

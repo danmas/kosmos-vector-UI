@@ -177,8 +177,12 @@ POST /api/pipeline/step/1/run?context-code=CARL
 **Ответ:** массив корневых узлов (дети корневой директории)
 
 **Ключевые особенности:**
-- Использует `includeMask` и `ignorePatterns` из `kb-config`
-- Флаг `selected` рассчитывается автоматически (проходит фильтры → true)
+- Использует `includeMask`, `ignorePatterns` и `fileSelection` из `kb-config`
+- Флаг `selected` рассчитывается автоматически:
+  - **Режим 1 (точный выбор)**: Если `fileSelection` не пустой → файлы из списка получают `selected: true`, остальные → `false`
+  - **Режим 2 (glob-маски)**: Если `fileSelection` пустой → файлы, соответствующие `includeMask`, получают `selected: true`, остальные → `false`
+  - Всегда применяются `ignorePatterns` для исключения файлов
+  - Директории получают `selected: true` если внутри есть выбранные файлы
 - Поддержка определения языка по расширению
 - Обработка ошибок доступа (permission denied → `error: true`)
 - Сортировка: папки сверху, затем файлы, по имени алфавитно

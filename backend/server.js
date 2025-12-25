@@ -1638,7 +1638,10 @@ function detectLanguageFromExtension(filePath) {
 }
 
 // Новая функция для генерации дерева в формате ProjectFile (v2.1.1)
-const getProjectTree = (dirPath, rootPath, depth = 12, currentDepth = 0, ignorePatterns = []) => {
+// includePatterns - массив паттернов из includeMask (например, ['**/*.sql'])
+// fileSelection - точный список выбранных файлов (массив относительных путей)
+// ignorePatterns - паттерны для исключения
+const getProjectTree = (dirPath, rootPath, depth = 12, currentDepth = 0, includePatterns = [], ignorePatterns = [], fileSelection = []) => {
   try {
     // Проверка глубины рекурсии
     if (currentDepth >= depth) {
@@ -1665,15 +1668,43 @@ const getProjectTree = (dirPath, rootPath, depth = 12, currentDepth = 0, ignoreP
       return ignorePatterns.some(pattern => minimatch(filePath, pattern, { dot: true }));
     };
 
+    // Функция проверки соответствия include паттернам
+    const matchesInclude = (filePath) => {
+      if (!includePatterns || includePatterns.length === 0) {
+        return true; // Если паттернов нет, показываем все
+      }
+      return includePatterns.some(pattern => minimatch(filePath, pattern, { dot: true }));
+    };
+
     // Проверяем, нужно ли исключить этот элемент
     const shouldIgnore = matchesIgnore(normalizedRelativePath) || matchesIgnore(name);
+    
+    // Определяем, выбран ли файл
+    let isSelected = false;
+    
+    if (shouldIgnore) {
+      // Игнорируемые файлы всегда не выбраны
+      isSelected = false;
+    } else if (stats.isFile()) {
+      // Для файлов: приоритет fileSelection над includeMask
+      if (fileSelection && fileSelection.length > 0) {
+        // Режим 1: Точный выбор - файл выбран только если он в fileSelection
+        isSelected = fileSelection.includes(normalizedRelativePath);
+      } else {
+        // Режим 2: Glob-маски - файл выбран если соответствует includeMask
+        isSelected = matchesInclude(normalizedRelativePath);
+      }
+    } else {
+      // Для директорий: selected будет вычислен позже на основе дочерних файлов
+      isSelected = false;
+    }
     
     const projectFile = {
       path: normalizedRelativePath,
       name: name,
       type: stats.isDirectory() ? 'directory' : 'file',
       size: stats.isFile() ? stats.size : 0,
-      selected: !shouldIgnore // По умолчанию выбраны все файлы, кроме игнорируемых
+      selected: isSelected
     };
 
     // Добавляем язык для файлов
@@ -1716,7 +1747,9 @@ const getProjectTree = (dirPath, rootPath, depth = 12, currentDepth = 0, ignoreP
                 rootPath, 
                 depth, 
                 currentDepth + 1, 
-                ignorePatterns
+                includePatterns,
+                ignorePatterns,
+                fileSelection
               );
             } catch (error) {
               // Возвращаем элемент с ошибкой вместо null
@@ -1817,6 +1850,15 @@ app.get('/api/project/tree', (req, res) => {
       });
     }
     
+    // Используем includeMask из текущей конфигурации KB
+    let includePatterns = [];
+    if (currentKbConfig.includeMask) {
+      includePatterns = currentKbConfig.includeMask
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+    }
+    
     // Используем ignorePatterns из текущей конфигурации KB
     let ignorePatterns = [];
     if (currentKbConfig.ignorePatterns) {
@@ -1826,10 +1868,20 @@ app.get('/api/project/tree', (req, res) => {
         .filter(p => p.length > 0);
     }
     
-    console.log(`[Project Tree API] Using ignore patterns: ${ignorePatterns.join(', ') || 'none'}`);
+    // Используем fileSelection из текущей конфигурации KB
+    const fileSelection = Array.isArray(currentKbConfig.fileSelection) ? currentKbConfig.fileSelection : [];
+    
+    // Определяем режим работы
+    const mode = fileSelection.length > 0 ? 'fileSelection (точный выбор)' : 'includeMask (glob-маски)';
+    console.log(`[Project Tree API] Mode: ${mode}`);
+    console.log(`[Project Tree API] Include patterns: ${includePatterns.join(', ') || 'none'}`);
+    console.log(`[Project Tree API] Ignore patterns: ${ignorePatterns.join(', ') || 'none'}`);
+    if (fileSelection.length > 0) {
+      console.log(`[Project Tree API] File selection: ${fileSelection.length} files`);
+    }
     
     // Генерируем дерево проекта
-    const tree = getProjectTree(cleanRootPath, cleanRootPath, depth, 0, ignorePatterns);
+    const tree = getProjectTree(cleanRootPath, cleanRootPath, depth, 0, includePatterns, ignorePatterns, fileSelection);
     
     if (!tree) {
       return res.status(500).json({

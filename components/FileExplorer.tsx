@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FileNode, ProjectFile, KnowledgeBaseConfig } from '../types';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from '../services/apiClient';
 import { minimatch } from 'minimatch';
@@ -187,6 +187,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  
+  // Режим выбора файлов: 'manual' — ручной выбор сохранён, 'mask' — выбор по маске
+  const [selectionMode, setSelectionMode] = useState<'manual' | 'mask'>('mask');
+  
+  // Ref для отслеживания начальной маски (для определения, изменил ли пользователь маску)
+  const initialMaskRef = useRef<string | null>(null);
   const [customSettings, setCustomSettings] = useState('');
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [settingsDialogValue, setSettingsDialogValue] = useState('');
@@ -361,19 +367,41 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   }, [standalone]);
 
   // Автоматическая загрузка дерева проекта в standalone режиме
+  // Загружаем только при изменении rootPath из конфигурации, НЕ при изменении pathInput пользователем
   useEffect(() => {
-    if (standalone && kbConfig && isConfigLoaded && pathInput) {
-      // Загружаем дерево только если изменился rootPath, а не metadata
-      loadProjectTree(pathInput);
+    if (standalone && kbConfig && isConfigLoaded && kbConfig.rootPath) {
+      // Загружаем дерево только если изменился rootPath из конфигурации
+      loadProjectTree(kbConfig.rootPath);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [standalone, kbConfig?.rootPath, pathInput, isConfigLoaded]);
+  }, [standalone, kbConfig?.rootPath, isConfigLoaded]);
 
   // Локальное применение маски при изменении mask или ignore (с debounce)
-  // Маска ВСЕГДА применяется при изменении — это переключает на "Режим 2 (glob-маски)"
   useEffect(() => {
     if (!standalone || !isConfigLoaded || files.length === 0) {
       return;
+    }
+    
+    // Запоминаем начальную маску при первой загрузке
+    if (initialMaskRef.current === null) {
+      initialMaskRef.current = mask;
+      console.log('[FileExplorer] Initial mask saved:', mask);
+      return; // Не применяем маску при первой загрузке — это сделает useEffect инициализации
+    }
+    
+    // Проверяем, изменилась ли маска пользователем
+    const maskChangedByUser = initialMaskRef.current !== mask;
+    
+    if (!maskChangedByUser && selectionMode === 'manual') {
+      console.log('[FileExplorer] Skipping mask application: manual selection mode active');
+      return;
+    }
+    
+    // Если маска изменилась — переключаемся в режим маски
+    if (maskChangedByUser) {
+      console.log('[FileExplorer] Mask changed by user, switching to mask mode');
+      setSelectionMode('mask');
+      initialMaskRef.current = mask; // Обновляем ref
     }
     
     // Debounce 300ms для применения маски
@@ -394,7 +422,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [mask, ignore, standalone, isConfigLoaded, files]);
+  }, [mask, ignore, standalone, isConfigLoaded, files, selectionMode]);
 
   useEffect(() => {
     if (!standalone) {
@@ -410,12 +438,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   // Инициализируем выбранные файлы при загрузке нового дерева
   useEffect(() => {
     if (files.length > 0 && standalone) {
-      // v2.1.1: Приоритет fileSelection над маской
+      // v2.1.1: Приоритет fileSelection над маской при загрузке
       if (kbConfig?.fileSelection && kbConfig.fileSelection.length > 0) {
         // Режим 1: Точный выбор — используем fileSelection
         console.log('[FileExplorer] Using fileSelection from config:', kbConfig.fileSelection.length, 'files');
         const kbSelection = new Set(kbConfig.fileSelection);
         setCheckedFiles(kbSelection);
+        setSelectionMode('manual'); // Устанавливаем режим ручного выбора
+        console.log('[FileExplorer] Selection mode: manual (from fileSelection)');
       } else {
         // Режим 2: Glob-маски — применяем маску локально
         console.log('[FileExplorer] Applying includeMask locally on tree load');
@@ -424,7 +454,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         
         const newSelection = applyMaskToTree(files, includePatterns, ignorePatterns);
         setCheckedFiles(newSelection);
-        
+        setSelectionMode('mask'); // Устанавливаем режим маски
+        console.log('[FileExplorer] Selection mode: mask');
         console.log('[FileExplorer] Selected files after mask:', newSelection.size);
       }
       
@@ -561,6 +592,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     
     setCheckedFiles(newCheckedFiles);
     
+    // При ручном выборе файлов — переключаемся в режим ручного выбора
+    if (standalone) {
+      setSelectionMode('manual');
+      console.log('[FileExplorer] Switched to manual selection mode');
+    }
+    
     // Уведомляем об изменениях
     const selectedFiles: string[] = Array.from(newCheckedFiles) as string[];
     const excludedFiles: string[] = []; // Пока исключения не реализованы
@@ -631,12 +668,41 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
               <span className="ml-1.5 text-xs text-blue-400 font-normal">v2.1.1</span>
             )}
           </h2>
-          {isDemoMode && (
-            <div className="text-amber-400 text-xs flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-              Demo Mode
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Индикатор статуса сохранения в заголовке */}
+            {saveStatus !== 'idle' && (
+              <div className={`text-xs flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                saveStatus === 'saving' ? 'bg-blue-900/20 text-blue-400' :
+                saveStatus === 'saved' ? 'bg-green-900/20 text-green-400' :
+                'bg-red-900/20 text-red-400'
+              }`}>
+                {saveStatus === 'saving' && (
+                  <>
+                    <div className="w-2.5 h-2.5 border border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    Сохранение...
+                  </>
+                )}
+                {saveStatus === 'saved' && (
+                  <>
+                    <span>✓</span>
+                    Сохранено!
+                  </>
+                )}
+                {saveStatus === 'error' && (
+                  <>
+                    <span>⚠️</span>
+                    Ошибка
+                  </>
+                )}
+              </div>
+            )}
+            {isDemoMode && (
+              <div className="text-amber-400 text-xs flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Demo Mode
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Folder Selection */}
@@ -681,7 +747,18 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 
         <div className="grid grid-cols-3 gap-2 mb-1.5" style={{ gridTemplateRows: 'repeat(1, 1fr)' }}>
           <div>
-            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-0.5">Include Mask</label>
+            <label className="block text-xs uppercase tracking-wider text-slate-500 mb-0.5 flex items-center gap-2">
+              Include Mask
+              {standalone && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  selectionMode === 'manual' 
+                    ? 'bg-amber-900/30 text-amber-400' 
+                    : 'bg-blue-900/30 text-blue-400'
+                }`}>
+                  {selectionMode === 'manual' ? '✋ Ручной выбор' : '🎯 По маске'}
+                </span>
+              )}
+            </label>
             <input 
               type="text" 
               value={mask}
@@ -727,33 +804,6 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           </div>
         </div>
 
-        {/* Индикатор статуса сохранения */}
-        {saveStatus !== 'idle' && (
-          <div className={`text-xs mb-1 flex items-center gap-1 px-1.5 py-0.5 rounded ${
-            saveStatus === 'saving' ? 'bg-blue-900/20 text-blue-400' :
-            saveStatus === 'saved' ? 'bg-green-900/20 text-green-400' :
-            'bg-red-900/20 text-red-400'
-          }`}>
-            {saveStatus === 'saving' && (
-              <>
-                <div className="w-2.5 h-2.5 border border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                Сохранение...
-              </>
-            )}
-            {saveStatus === 'saved' && (
-              <>
-                <span>✓</span>
-                Сохранено
-              </>
-            )}
-            {saveStatus === 'error' && (
-              <>
-                <span>⚠️</span>
-                Ошибка
-              </>
-            )}
-          </div>
-         )}
        </div>
 
       {/* Диалог редактирования Custom Settings */}

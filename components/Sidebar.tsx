@@ -7,6 +7,8 @@ interface SidebarProps {
   onOpenLogsDialog: () => void;
   contextCode: string;
   setContextCode: (code: string) => void;
+  availableContextCodes: string[];
+  onAddContextCode: (code: string) => void;
   onRefreshCache?: () => void;
   isPrefetching?: boolean;
 }
@@ -17,9 +19,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenLogsDialog, 
   contextCode, 
   setContextCode,
+  availableContextCodes,
+  onAddContextCode,
   onRefreshCache,
   isPrefetching = false
 }) => {
+  const handleAddContextCode = () => {
+    const newCode = prompt('Введите имя нового Context Code:');
+    if (newCode && newCode.trim()) {
+      onAddContextCode(newCode.trim());
+    }
+  };
   const navItems = [
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: '📊' },
     { id: AppView.FILES, label: 'Knowledge Base', icon: '🗄️' },
@@ -38,6 +48,52 @@ const Sidebar: React.FC<SidebarProps> = ({
         <p className="text-[10px] text-slate-500 mt-0.5">Codebase RAG System</p>
       </div>
       
+      <div className="p-3 border-t border-slate-700 space-y-2">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+          System Online
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] text-slate-400">Context Code:</label>
+          <div className="flex gap-1.5">
+            <select
+              value={contextCode}
+              onChange={(e) => setContextCode(e.target.value)}
+              className="flex-1 bg-slate-800 border border-slate-600 text-slate-200 text-[10px] px-1.5 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+            >
+              {availableContextCodes.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleAddContextCode}
+              title="Создать новый Context Code"
+              className="px-1.5 py-1 rounded text-[10px] transition-colors bg-slate-800 border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+            >
+              +
+            </button>
+            {onRefreshCache && (
+              <button
+                onClick={onRefreshCache}
+                disabled={isPrefetching}
+                title={isPrefetching ? "Загрузка..." : "Обновить кэш данных"}
+                className={`px-1.5 py-1 rounded text-[10px] transition-colors ${
+                  isPrefetching 
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                    : 'bg-slate-800 border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                {isPrefetching ? (
+                  <span className="inline-block w-2.5 h-2.5 border border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                ) : (
+                  '🔄'
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <nav className="flex-1 py-2 overflow-y-auto">
         <ul>
           {navItems.map((item) => (
@@ -67,44 +123,6 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
         </div>
       </nav>
-
-      <div className="p-3 border-t border-slate-700 space-y-2">
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-          System Online
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] text-slate-400">Context Code:</label>
-          <div className="flex gap-1.5">
-            <select
-              value={contextCode}
-              onChange={(e) => setContextCode(e.target.value)}
-              className="flex-1 bg-slate-800 border border-slate-600 text-slate-200 text-[10px] px-1.5 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-            >
-              <option value="CARL">CARL</option>
-              <option value="TEST">TEST</option>
-            </select>
-            {onRefreshCache && (
-              <button
-                onClick={onRefreshCache}
-                disabled={isPrefetching}
-                title={isPrefetching ? "Загрузка..." : "Обновить кэш данных"}
-                className={`px-1.5 py-1 rounded text-[10px] transition-colors ${
-                  isPrefetching 
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
-                    : 'bg-slate-800 border border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white'
-                }`}
-              >
-                {isPrefetching ? (
-                  <span className="inline-block w-2.5 h-2.5 border border-slate-400 border-t-transparent rounded-full animate-spin"></span>
-                ) : (
-                  '🔄'
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };

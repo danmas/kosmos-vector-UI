@@ -40,6 +40,8 @@ const AppContent: React.FC = () => {
   const { 
     currentContextCode: contextCode, 
     setCurrentContextCode, 
+    availableContextCodes,
+    addContextCode,
     prefetchAll, 
     invalidate,
     isPrefetching 
@@ -345,6 +347,8 @@ const AppContent: React.FC = () => {
         onOpenLogsDialog={() => setIsLogsDialogOpen(true)}
         contextCode={contextCode}
         setContextCode={setContextCode}
+        availableContextCodes={availableContextCodes}
+        onAddContextCode={addContextCode}
         onRefreshCache={() => {
           invalidate();
           prefetchAll(contextCode);

@@ -23,6 +23,10 @@ export interface DataCacheContextValue {
   currentContextCode: string;
   setCurrentContextCode: (code: string) => void;
   
+  // Список доступных Context Codes
+  availableContextCodes: string[];
+  addContextCode: (code: string) => void;
+  
   // Получение данных из кэша
   getGraph: () => CacheEntry<GraphData> | null;
   getItemsList: () => CacheEntry<AiItemSummary[]> | null;
@@ -55,6 +59,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
 }) => {
   const [cache, setCache] = useState<DataCacheState>({});
   const [currentContextCode, setCurrentContextCode] = useState(initialContextCode);
+  const [availableContextCodes, setAvailableContextCodes] = useState<string[]>(['CARL', 'TEST']);
   const [isPrefetching, setIsPrefetching] = useState(false);
   const [prefetchProgress, setPrefetchProgress] = useState({ loaded: 0, total: 2 });
   
@@ -221,9 +226,27 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     }
   }, [currentContextCode]);
 
+  // Добавление нового Context Code
+  const addContextCode = useCallback((code: string) => {
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) {
+      console.warn('[DataCache] Cannot add empty context code');
+      return;
+    }
+    if (availableContextCodes.includes(trimmedCode)) {
+      console.warn(`[DataCache] Context code "${trimmedCode}" already exists`);
+      return;
+    }
+    setAvailableContextCodes(prev => [...prev, trimmedCode]);
+    setCurrentContextCode(trimmedCode);
+    console.log(`[DataCache] New context code added: ${trimmedCode}`);
+  }, [availableContextCodes]);
+
   const value: DataCacheContextValue = {
     currentContextCode,
     setCurrentContextCode,
+    availableContextCodes,
+    addContextCode,
     getGraph,
     getItemsList,
     setGraph,

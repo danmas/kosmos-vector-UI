@@ -45,7 +45,7 @@ const DEFAULT_KB_CONFIG = {
   // Обратная совместимость со старой моделью
   targetPath: './',
   includeMask: '**/*.{py,js,ts,tsx,go,java}',
-  ignorePatterns: '**/tests/*, **/venv/*, **/node_modules/*',
+  ignorePatterns: '**/tests/*, **/venv/*, **/node_modules/*, **/.cursor/**, **/.git/**, **/.vscode/**',
   
   // Новые обязательные поля v2.1.1
   rootPath: PROJECT_ROOT, // Абсолютный путь к проекту на сервере
@@ -1723,7 +1723,7 @@ const getProjectTree = (dirPath, rootPath, depth = 12, currentDepth = 0, include
         // Базовые игнорируемые папки и файлы
         const baseIgnored = [
           'node_modules', '.git', '.idea', '__pycache__', 
-          'dist', 'build', '.vscode', 'coverage', '.DS_Store',
+          'dist', 'build', '.vscode', '.cursor', 'coverage', '.DS_Store',
           'venv', 'env', '.env', '.next', '.nuxt', 'target'
         ];
         
@@ -2070,7 +2070,7 @@ const getFileTree = (dirPath, includePatterns = [], ignorePatterns = [], rootPat
     if (stats.isDirectory()) {
         const items = fs.readdirSync(dirPath);
         // Базовые игнорируемые папки
-        const baseIgnored = ['node_modules', '.git', '.idea', '__pycache__', 'dist', 'build', '.vscode', 'coverage', '.DS_Store'];
+        const baseIgnored = ['node_modules', '.git', '.idea', '__pycache__', 'dist', 'build', '.vscode', '.cursor', 'coverage', '.DS_Store'];
         
         // Фильтруем элементы: убираем базовые игнорируемые и те, что соответствуют ignore паттернам
         const filtered = items.filter(item => {

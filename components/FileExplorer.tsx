@@ -108,9 +108,20 @@ const FileTreeNode: React.FC<{
   depth: number; 
   checkedFiles: Set<string>;
   onToggleCheck: (filePath: string, checked: boolean, isDirectory: boolean) => void;
-}> = ({ node, depth, checkedFiles, onToggleCheck }) => {
-  const [expanded, setExpanded] = useState(true);
+  ignorePatterns?: string[];
+}> = ({ node, depth, checkedFiles, onToggleCheck, ignorePatterns = [] }) => {
   const nodeId = getNodeId(node);
+  const isDir = isDirectory(node);
+  
+  // Проверяем, попадает ли папка в игнор
+  const isIgnored = isDir && ignorePatterns.length > 0 && matchesPattern(nodeId, ignorePatterns, false);
+  
+  // Базовые игнорируемые папки (всегда схлопнуты)
+  const baseIgnoredFolders = ['.cursor', '.git', '.vscode', 'node_modules', 'venv', '__pycache__', 'dist', 'build', '.idea'];
+  const isBaseIgnored = isDir && baseIgnoredFolders.includes(node.name);
+  
+  // Папки, попадающие в игнор, схлопнуты по умолчанию
+  const [expanded, setExpanded] = useState(!isIgnored && !isBaseIgnored);
   const isChecked = checkedFiles.has(nodeId);
 
   const toggleExpand = () => setExpanded(!expanded);
@@ -155,6 +166,7 @@ const FileTreeNode: React.FC<{
               depth={depth + 1} 
               checkedFiles={checkedFiles}
               onToggleCheck={onToggleCheck}
+              ignorePatterns={ignorePatterns}
             />
           ))}
         </div>
@@ -175,7 +187,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
 }) => {
   // Состояние для обратной совместимости (legacy mode)
   const [mask, setMask] = useState('**/*.{py,js,ts,tsx,go,java}');
-  const [ignore, setIgnore] = useState('**/tests/*, **/venv/*, **/node_modules/*');
+  const [ignore, setIgnore] = useState('**/tests/*, **/venv/*, **/node_modules/*, **/.cursor/**, **/.git/**, **/.vscode/**');
   const [pathInput, setPathInput] = useState('./');
   const [checkedFiles, setCheckedFiles] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -217,7 +229,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         setPathInput(result.data.targetPath || './');
       }
       const loadedMask = result.data.includeMask || '**/*.{py,js,ts,tsx,go,java}';
-      const loadedIgnore = result.data.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*';
+      const loadedIgnore = result.data.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*, **/.cursor/**, **/.git/**, **/.vscode/**';
       
       setMask(loadedMask);
       setIgnore(loadedIgnore);
@@ -241,7 +253,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         if (data.success && data.config) {
           setPathInput(data.config.rootPath || data.config.targetPath || './');
           const loadedMask = data.config.includeMask || '**/*.{py,js,ts,tsx,go,java}';
-          const loadedIgnore = data.config.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*';
+          const loadedIgnore = data.config.ignorePatterns || '**/tests/*, **/venv/*, **/node_modules/*, **/.cursor/**, **/.git/**, **/.vscode/**';
           
           setMask(loadedMask);
           setIgnore(loadedIgnore);
@@ -859,15 +871,20 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   <p>Analyzing directory structure...</p>
               </div>
           ) : files.length > 0 ? (
-            files.map((node) => (
+            (() => {
+              // Парсим ignorePatterns для передачи в дерево
+              const ignorePatternsArray = ignore.split(',').map(p => p.trim()).filter(p => p.length > 0);
+              return files.map((node) => (
                 <FileTreeNode 
                   key={getNodeId(node)} 
                   node={node} 
                   depth={1} 
                   checkedFiles={checkedFiles}
                   onToggleCheck={handleToggleCheck}
+                  ignorePatterns={ignorePatternsArray}
                 />
-            ))
+              ));
+            })()
           ) : (
             <div className="text-center text-slate-500 py-10 min-h-[200px] flex items-center justify-center">
                 No files found. Check path and click "Scan Folder".

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Terminal, Code, Cpu, AlertCircle, Play, RefreshCcw, Wand2, X, Copy, Check, FileText, Download, Upload } from 'lucide-react';
 import { AiItem, FunctionMetadata, LogicAnalysisResponse } from '../types';
 import { analyzeFunctionLogic, analyzeFunctionLogicFromMetadata } from '../services/logicAnalyzerService';
@@ -23,6 +23,41 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
   const [isSavingGraph, setIsSavingGraph] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
+  const handleLoadGraph = useCallback(async (silent: boolean = false) => {
+    if (!item?.id) {
+      if (!silent) {
+        setError("Не выбран элемент для загрузки");
+      }
+      return;
+    }
+
+    setIsLoadingGraph(true);
+    if (!silent) {
+      setError(null);
+    }
+    try {
+      const response = await apiClient.getLogicGraph(item.id);
+      // Заполняем данные из сохраненного анализа
+      setGraph(response.logicGraph.graph);
+      setLogicDescription(response.logicGraph.logic);
+      setRawResponse(JSON.stringify(response.logicGraph, null, 2));
+    } catch (err: any) {
+      if (err.status === 404) {
+        // 404 - это нормально при первом открытии, не показываем ошибку при автозагрузке
+        if (!silent) {
+          setError("Анализ логики не найден на сервере для данного элемента");
+        }
+      } else {
+        if (!silent) {
+          setError(err.message || "Ошибка при загрузке анализа логики");
+        }
+      }
+      console.error("Load Graph Error:", err);
+    } finally {
+      setIsLoadingGraph(false);
+    }
+  }, [item?.id]);
+
   // Инициализация inputText из item.l0_code при открытии диалога
   useEffect(() => {
     if (isOpen && item) {
@@ -41,6 +76,13 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       setError(null);
     }
   }, [isOpen, item]);
+
+  // Автоматическая загрузка сохраненных данных при открытии диалога
+  useEffect(() => {
+    if (isOpen && item?.id) {
+      handleLoadGraph(true);
+    }
+  }, [isOpen, item?.id, handleLoadGraph]);
 
   const sanitizeAndParse = (text: string): any => {
     let cleaned = text.trim();
@@ -97,6 +139,22 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       setGraph(response.graph);
       setLogicDescription(response.logic);
       setRawResponse(JSON.stringify(response, null, 2));
+      
+      // Автоматическое сохранение после успешного анализа
+      if (item?.id) {
+        try {
+          setIsSavingGraph(true);
+          setSaveSuccess(false);
+          await apiClient.saveLogicGraph(item.id, response);
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (saveErr: any) {
+          // Не блокируем работу, если сохранение не удалось, но логируем ошибку
+          console.error("Auto-save error:", saveErr);
+        } finally {
+          setIsSavingGraph(false);
+        }
+      }
     } catch (err: any) {
       setError(err.message || "Ошибка при анализе кода.");
       console.error("Parse Error:", err);
@@ -119,32 +177,6 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
     navigator.clipboard.writeText(rawResponse);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleLoadGraph = async () => {
-    if (!item?.id) {
-      setError("Не выбран элемент для загрузки");
-      return;
-    }
-
-    setIsLoadingGraph(true);
-    setError(null);
-    try {
-      const response = await apiClient.getLogicGraph(item.id);
-      // Заполняем данные из сохраненного анализа
-      setGraph(response.logicGraph.graph);
-      setLogicDescription(response.logicGraph.logic);
-      setRawResponse(JSON.stringify(response.logicGraph, null, 2));
-    } catch (err: any) {
-      if (err.status === 404) {
-        setError("Анализ логики не найден на сервере для данного элемента");
-      } else {
-        setError(err.message || "Ошибка при загрузке анализа логики");
-      }
-      console.error("Load Graph Error:", err);
-    } finally {
-      setIsLoadingGraph(false);
-    }
   };
 
   const handleSaveGraph = async () => {

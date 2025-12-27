@@ -98,6 +98,7 @@ export async function analyzeFunctionLogic(item: AiItem): Promise<LogicAnalysisR
     - Укажи, какие таблицы читаются (SELECT) и в какие записываются данные (INSERT/UPDATE/DELETE).
     - Опиши все ветвления (if/else, switch) и циклы.
     - Описание должно быть формальным и точным.
+    - Отформатируй текст чтобы было красиво и понятно.
 
     2. РАЗДЕЛ "graph" (Граф потока управления):
     Соблюдай строгие правила связей:

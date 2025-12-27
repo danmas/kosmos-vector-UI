@@ -195,3 +195,13 @@ export interface FunctionMetadata {
   update_tables?: string[];
   called_functions?: string[];
 }
+
+// ────────────────────────────────────── AI Comment Types
+
+export interface AiCommentResponse {
+  success: boolean;
+  itemId: string;
+  comment: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}

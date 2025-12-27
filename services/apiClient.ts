@@ -1,4 +1,4 @@
-import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse } from '../types';
+import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse, AiCommentResponse } from '../types';
 import { MOCK_AI_ITEMS } from '../constants';
 import { validateApiResponse, ValidationResult } from './contractValidator';
 import { uiLogger } from './uiLogger';
@@ -334,6 +334,26 @@ export class ApiClient {
     return this.request<LogicGraphResponse>(`/api/items/${encodeURIComponent(itemId)}/logic-graph`, {
       method: 'POST',
       body: JSON.stringify(analysis),
+    });
+  }
+
+  // GET /api/items/:id/comment - получить комментарий для AiItem
+  async getComment(itemId: string): Promise<AiCommentResponse> {
+    return this.request<AiCommentResponse>(`/api/items/${encodeURIComponent(itemId)}/comment`);
+  }
+
+  // POST /api/items/:id/comment - создать или обновить комментарий (UPSERT)
+  async saveComment(itemId: string, comment: string): Promise<AiCommentResponse> {
+    return this.request<AiCommentResponse>(`/api/items/${encodeURIComponent(itemId)}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+  }
+
+  // DELETE /api/items/:id/comment - удалить комментарий
+  async deleteComment(itemId: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/items/${encodeURIComponent(itemId)}/comment`, {
+      method: 'DELETE',
     });
   }
 

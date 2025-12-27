@@ -202,6 +202,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // Режим выбора файлов: 'manual' — ручной выбор сохранён, 'mask' — выбор по маске
   const [selectionMode, setSelectionMode] = useState<'manual' | 'mask'>('mask');
+  const selectionModeRef = useRef<'manual' | 'mask'>('mask'); // Ref для доступа в таймаутах
+  
+  // Синхронизируем ref с state
+  useEffect(() => {
+    selectionModeRef.current = selectionMode;
+  }, [selectionMode]);
   
   // Ref для отслеживания начальной маски (для определения, изменил ли пользователь маску)
   const initialMaskRef = useRef<string | null>(null);
@@ -337,11 +343,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           }
         };
         
-        // Если режим маски или fileSelection пустой в текущей конфигурации - очищаем fileSelection
-        // (это гарантирует, что при использовании маски не будет конфликта с ручным выбором)
-        if (selectionMode === 'mask' || !kbConfig.fileSelection || kbConfig.fileSelection.length === 0) {
+        // Если режим маски - очищаем fileSelection
+        // При ручном выборе НЕ очищаем (fileSelection уже сохраняется отдельно через saveFileSelection)
+        if (selectionMode === 'mask') {
           updates.fileSelection = [];
         }
+        // При ручном режиме не трогаем fileSelection - он управляется через saveFileSelection
         
         const result = await apiClient.updateKbConfig(updates);
         // Обновляем конфигурацию
@@ -422,6 +429,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     if (maskChangedByUser) {
       console.log('[FileExplorer] Mask changed by user, switching to mask mode');
       setSelectionMode('mask');
+      selectionModeRef.current = 'mask'; // Обновляем ref немедленно
       initialMaskRef.current = mask; // Обновляем ref
       
       // Очищаем fileSelection в локальной конфигурации при переключении на режим маски
@@ -433,6 +441,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     
     // Debounce 300ms для применения маски
     const timeoutId = setTimeout(() => {
+      // Проверяем актуальный режим через ref (мог измениться на manual пока ждали)
+      if (selectionModeRef.current === 'manual') {
+        console.log('[FileExplorer] Skipping mask application: mode changed to manual');
+        return;
+      }
+      
       console.log('[FileExplorer] Applying mask locally:', mask);
       
       // Парсим паттерны
@@ -449,7 +463,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [mask, ignore, standalone, isConfigLoaded, files, selectionMode, kbConfig]);
+  }, [mask, ignore, standalone, isConfigLoaded, files, kbConfig]); // Убрали selectionMode из зависимостей!
 
   useEffect(() => {
     if (!standalone) {
@@ -623,6 +637,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     // При ручном выборе файлов — переключаемся в режим ручного выбора
     if (standalone) {
       setSelectionMode('manual');
+      selectionModeRef.current = 'manual'; // Обновляем ref немедленно для отмены pending таймаутов
       console.log('[FileExplorer] Switched to manual selection mode');
     }
     

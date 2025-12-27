@@ -326,7 +326,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       
       if (standalone && kbConfig) {
         // v2.1.1: Используем новый API для обновления конфигурации
-        const result = await apiClient.updateKbConfig({
+        // Если режим маски - очищаем fileSelection
+        const updates: Partial<KnowledgeBaseConfig> = {
           rootPath: targetPath,
           includeMask,
           ignorePatterns,
@@ -334,9 +335,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             ...kbConfig.metadata,
             custom_settings: settingsToSave
           }
-        });
-        // Обновляем только metadata, чтобы не вызывать перерисовку списка файлов
-        setKbConfig(prev => prev ? { ...prev, metadata: result.config.metadata } : result.config);
+        };
+        
+        // Если режим маски или fileSelection пустой в текущей конфигурации - очищаем fileSelection
+        // (это гарантирует, что при использовании маски не будет конфликта с ручным выбором)
+        if (selectionMode === 'mask' || !kbConfig.fileSelection || kbConfig.fileSelection.length === 0) {
+          updates.fileSelection = [];
+        }
+        
+        const result = await apiClient.updateKbConfig(updates);
+        // Обновляем конфигурацию
+        setKbConfig(result.config);
       } else {
         // Legacy: Используем старый API
         const response = await fetch('/api/kb-config', {
@@ -414,6 +423,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       console.log('[FileExplorer] Mask changed by user, switching to mask mode');
       setSelectionMode('mask');
       initialMaskRef.current = mask; // Обновляем ref
+      
+      // Очищаем fileSelection в локальной конфигурации при переключении на режим маски
+      if (kbConfig && kbConfig.fileSelection && kbConfig.fileSelection.length > 0) {
+        console.log('[FileExplorer] Clearing fileSelection locally (switching to mask mode)');
+        setKbConfig(prev => prev ? { ...prev, fileSelection: [] } : null);
+      }
     }
     
     // Debounce 300ms для применения маски
@@ -434,7 +449,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [mask, ignore, standalone, isConfigLoaded, files, selectionMode]);
+  }, [mask, ignore, standalone, isConfigLoaded, files, selectionMode, kbConfig]);
 
   useEffect(() => {
     if (!standalone) {
@@ -518,11 +533,12 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     }
 
     const timeoutId = setTimeout(() => {
+      // При сохранении, если режим маски - убеждаемся что fileSelection пустой
       saveKbConfig(pathInput, mask, ignore, customSettings);
     }, 1000); // 1 секунда debounce для сохранения
 
     return () => clearTimeout(timeoutId);
-  }, [pathInput, mask, ignore, customSettings, isConfigLoaded]);
+  }, [pathInput, mask, ignore, customSettings, isConfigLoaded, selectionMode]);
 
   // Автоматическое обновление при изменении паттернов (debounce 500ms) — только для legacy режима
   useEffect(() => {

@@ -67,11 +67,11 @@ export interface KnowledgeBaseConfig {
   targetPath: string;
   includeMask: string;
   ignorePatterns: string;
-  
+
   // Новые обязательные поля v2.1.1
   rootPath: string; // Абсолютный путь к проекту на стороне бэкенда
   fileSelection: string[]; // Точный список выбранных относительных путей
-  
+
   // Опциональные поля
   metadata?: {
     projectName?: string;
@@ -80,7 +80,7 @@ export interface KnowledgeBaseConfig {
     tags?: string[];
     [key: string]: any;
   };
-  
+
   lastUpdated: string;
 }
 
@@ -127,23 +127,23 @@ export interface ChatMessage {
 }
 
 export interface ServerLog {
-    id: string;
-    timestamp: string;
-    level: 'INFO' | 'ERROR' | 'WARN';
-    message: string;
-    source?: 'UI' | 'SERVER'; // Источник лога: UI (запросы из фронтенда) или SERVER (логи бэкенда)
-    details?: {
-        method?: string;
-        url?: string;
-        status?: number;
-        statusText?: string;
-        error?: string;
-        headers?: Record<string, string>;
-        requestBody?: any;
-        responseBody?: any;
-        duration?: number;
-        [key: string]: any; // Для дополнительных полей
-    };
+  id: string;
+  timestamp: string;
+  level: 'INFO' | 'ERROR' | 'WARN';
+  message: string;
+  source?: 'UI' | 'SERVER'; // Источник лога: UI (запросы из фронтенда) или SERVER (логи бэкенда)
+  details?: {
+    method?: string;
+    url?: string;
+    status?: number;
+    statusText?: string;
+    error?: string;
+    headers?: Record<string, string>;
+    requestBody?: any;
+    responseBody?: any;
+    duration?: number;
+    [key: string]: any; // Для дополнительных полей
+  };
 }
 
 // ────────────────────────────────────── Logic Architect Types
@@ -204,4 +204,40 @@ export interface AiCommentResponse {
   comment: string | null;
   createdAt: string;
   updatedAt?: string | null;
+}
+
+// ────────────────────────────────────── Natural Query & Agent Script Types
+
+export interface NaturalQueryResponse {
+  success: boolean;
+  human: string;
+  raw: any;
+  scriptId: number;
+  cached: boolean;
+}
+
+export interface AgentScript {
+  id: number;
+  context_code: string;
+  question: string;
+  script: string;
+  usage_count: number;
+  is_valid: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentScriptsResponse {
+  success: boolean;
+  scripts: AgentScript[];
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+  };
+}
+
+export interface AgentScriptDetailResponse {
+  success: boolean;
+  script: AgentScript;
 }

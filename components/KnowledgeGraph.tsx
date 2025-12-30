@@ -5,10 +5,12 @@ import { getGraphWithFallback, GraphData, apiClient } from '../services/apiClien
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
+import NaturalQueryDialog from './NaturalQueryDialog';
 
 interface KnowledgeGraphProps {
   // Props are now optional since we fetch data internally
 }
+
 
 // Функция для форматирования времени с начала загрузки страницы
 let pageLoadTime = performance.now();
@@ -44,7 +46,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [clickHistory, setClickHistory] = useState<string[]>([]);
   const [sessionClickHistory, setSessionClickHistory] = useState<string[]>([]);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-  
+  const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
+
   // Состояния для модального окна деталей узла
   const [modalNodeId, setModalNodeId] = useState<string | null>(null);
   const [modalItemData, setModalItemData] = useState<AiItem | null>(null);
@@ -96,16 +99,16 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Функция для нахождения всех связанных узлов из ПОЛНОГО графа (без учета фильтра)
   const findRelatedNodes = (nodeId: string): Set<string> => {
     if (!graphData) return new Set([nodeId]);
-    
+
     const relatedIds = new Set<string>([nodeId]);
-    
+
     // Ищем все связи, где узел является source или target
     // graphData.links содержит оригинальные строковые ID (до обработки D3)
     for (const link of graphData.links) {
       // link.source и link.target - строки (до преобразования D3 force simulation)
       const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
       const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
-      
+
       if (sourceId === nodeId) {
         relatedIds.add(targetId);
       }
@@ -113,7 +116,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         relatedIds.add(sourceId);
       }
     }
-    
+
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] Ctrl+клик на ${nodeId}: найдено ${relatedIds.size} связанных узлов:`, Array.from(relatedIds));
     return relatedIds;
   };
@@ -131,7 +134,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     const loadGraphData = async () => {
       const loadStart = performance.now();
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] loadGraphData запущен для контекста: ${currentContextCode}`);
-      
+
       // Проверяем кэш
       const cached = getGraph();
       if (cached) {
@@ -148,12 +151,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         setIsLoading(false);
         return;
       }
-      
+
       // Если кэш пуст - загружаем с сервера
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Кэш пуст, загружаем с сервера...`);
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const result = await getGraphWithFallback();
         const fetchEnd = performance.now();
@@ -162,10 +165,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           links: result.data.links.length,
           isDemo: result.isDemo
         });
-        
+
         // Сохраняем в кэш
         setGraph(result.data, result.isDemo);
-        
+
         setGraphData(result.data);
         setIsDemoMode(result.isDemo);
         setDataSource('server');
@@ -197,13 +200,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       graphDataNodes: graphData?.nodes.length,
       filteredItemIdsSize: filteredItemIds.size
     });
-    
+
     if (!graphData || graphData.nodes.length === 0) {
       const memoEnd = performance.now();
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo filteredGraphData: ${(memoEnd - memoStart).toFixed(1)}ms (ранний выход)`);
       return null;
     }
-    
+
     // Если фильтр пуст, показываем весь граф (обратная совместимость)
     if (filteredItemIds.size === 0) {
       const memoEnd = performance.now();
@@ -212,7 +215,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
 
     // Фильтруем узлы - только те, чьи ID есть в filteredItemIds
-    const filteredNodes = graphData.nodes.filter(node => 
+    const filteredNodes = graphData.nodes.filter(node =>
       filteredItemIds.has(node.id)
     );
 
@@ -220,7 +223,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
 
     // Фильтруем связи - только те, где и source и target есть в отфильтрованных узлах
-    const filteredLinks = graphData.links.filter(link => 
+    const filteredLinks = graphData.links.filter(link =>
       filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target)
     );
 
@@ -228,14 +231,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-    
+
     const memoEnd = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo filteredGraphData: ${(memoEnd - memoStart).toFixed(1)}ms`);
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo результат:`, {
       nodes: result.nodes.length,
       links: result.links.length
     });
-    
+
     return result;
   }, [graphData, filteredItemIds]);
 
@@ -244,7 +247,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     if (!filteredGraphData || !search.trim()) {
       return filteredGraphData;
     }
-    
+
     // Преобразуем паттерн в регулярное выражение
     // Поддерживаем:
     // - ~X - исключает один символ X
@@ -252,10 +255,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     //   * Если ~[...] стоит перед текстом: negative lookbehind - текст не должен идти после этой последовательности
     //   * Если ~[...] стоит после текста: negative lookahead - после текста не должна идти эта последовательность
     // - * - wildcard (любой набор символов)
-    
+
     // Функция для экранирования символов regex
     const escapeRegex = (str: string) => str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    
+
     // Функция для обработки текста (с учетом * и ~X, но без ~[...])
     const processText = (text: string): string => {
       let result = '';
@@ -281,10 +284,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       }
       return result;
     };
-    
+
     let searchPattern = '';
     let i = 0;
-    
+
     while (i < search.length) {
       if (search[i] === '~' && i + 1 < search.length && search[i + 1] === '[') {
         // Обрабатываем ~[...]
@@ -305,12 +308,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         if (i < search.length && search[i] === ']') {
           i++; // Пропускаем ]
           const escapedSeq = escapeRegex(sequence);
-          
+
           // Собираем текст до ~[...]
           const textBefore = search.slice(0, excludeStart);
           // Собираем текст после ~[...]
           const textAfter = search.slice(i);
-          
+
           if (textBefore.length > 0 && textAfter.length > 0) {
             // text~[seq]text - комбинированный случай
             const processedBefore = processText(textBefore);
@@ -358,18 +361,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         i++;
       }
     }
-    
+
     const regex = new RegExp(searchPattern, 'i');
-    
-    const filteredNodes = filteredGraphData.nodes.filter(node => 
+
+    const filteredNodes = filteredGraphData.nodes.filter(node =>
       regex.test(node.id)
     );
-    
+
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-    const filteredLinks = filteredGraphData.links.filter(link => 
+    const filteredLinks = filteredGraphData.links.filter(link =>
       filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target)
     );
-    
+
     return {
       nodes: filteredNodes,
       links: filteredLinks
@@ -381,24 +384,24 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     if (!finalFilteredGraphData || focusedNodeIds.size === 0) {
       return finalFilteredGraphData;
     }
-    
+
     // Находим все связи, где любой из focusedNodeIds является source или target
-    const relatedLinks = finalFilteredGraphData.links.filter(link => 
+    const relatedLinks = finalFilteredGraphData.links.filter(link =>
       focusedNodeIds.has(link.source) || focusedNodeIds.has(link.target)
     );
-    
+
     // Собираем ID всех связанных узлов
     const relatedNodeIds = new Set<string>(focusedNodeIds);
     relatedLinks.forEach(link => {
       relatedNodeIds.add(link.source);
       relatedNodeIds.add(link.target);
     });
-    
+
     // Фильтруем узлы
-    const filteredNodes = finalFilteredGraphData.nodes.filter(node => 
+    const filteredNodes = finalFilteredGraphData.nodes.filter(node =>
       relatedNodeIds.has(node.id)
     );
-    
+
     return {
       nodes: filteredNodes,
       links: relatedLinks
@@ -411,7 +414,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: focusFilteredGraphData?.nodes.length,
       links: focusFilteredGraphData?.links.length
     });
-    
+
     if (!svgRef.current || !focusFilteredGraphData || focusFilteredGraphData.nodes.length === 0) {
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect: ранний выход`);
       return;
@@ -449,20 +452,20 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     // Define Arrowhead (outside container so it doesn't scale)
     svg.append("defs").append("marker")
-        .attr("id", "arrowhead")
-        .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 25)
-        .attr("refY", 0)
-        .attr("markerWidth", 6)
-        .attr("markerHeight", 6)
-        .attr("orient", "auto")
-        .append("path")
-        .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#475569");
+      .attr("id", "arrowhead")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 25)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#475569");
 
     const simulationStart = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Создание simulation`);
-    
+
     const simulation = d3.forceSimulation(nodes as any)
       .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150))
       .force("charge", d3.forceManyBody()
@@ -473,7 +476,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .force("collide", d3.forceCollide(40))
       .alphaDecay(0.05)       // быстрее затухание (default 0.0228)
       .alphaMin(0.001);       // раньше остановка
-    
+
     const simulationCreated = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] simulation создан за ${(simulationCreated - simulationStart).toFixed(1)}ms`);
 
@@ -529,19 +532,19 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         // Ctrl+клик — добавляем все связанные узлы к фильтру (из полного графа, без учета текущего фильтра)
         if (event.ctrlKey || event.metaKey) {
           event.stopPropagation();
-          
+
           // Находим все связанные узлы из полного graphData
           const relatedNodes = findRelatedNodes(d.id);
-          
+
           // Добавляем их к текущему фильтру
           const newFilteredIds = new Set<string>(filteredItemIds);
           for (const id of relatedNodes) {
             newFilteredIds.add(id);
           }
-          
+
           console.log(`[KnowledgeGraph] [${getTimeStamp()}] Обновляем фильтр: было ${filteredItemIds.size}, стало ${newFilteredIds.size}`);
           setFilteredItemIds(newFilteredIds);
-          
+
           // Также добавляем к фокусу для подсветки
           const newFocusSet = new Set(focusedNodeIds);
           for (const id of relatedNodes) {
@@ -554,18 +557,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     // Node Circles
     // 5 уровней жёлтого: от яркого (последний клик) до бледного
     const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
-    
+
     node.append("circle")
       .attr("r", 20)
       .attr("fill", (d: any) => {
         // Оригинальная логика по типу
-        switch(d.type) {
-            case AiItemType.FUNCTION: return "#3b82f6"; // blue
-            case AiItemType.CLASS: return "#10b981"; // emerald
-            case AiItemType.METHOD: return "#a855f7"; // purple
-            case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
-            case AiItemType.INTERFACE: return "#ec4899"; // pink
-            default: return "#64748b";
+        switch (d.type) {
+          case AiItemType.FUNCTION: return "#3b82f6"; // blue
+          case AiItemType.CLASS: return "#10b981"; // emerald
+          case AiItemType.METHOD: return "#a855f7"; // purple
+          case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
+          case AiItemType.INTERFACE: return "#ec4899"; // pink
+          default: return "#64748b";
         }
       })
       .attr("stroke", (d: any) => {
@@ -617,7 +620,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     svg.call(zoom);
 
     // Handle wheel events for zoom (без CTRL, чувствительность увеличена в 1.5 раза)
-    svg.on("wheel.zoom", function(event: WheelEvent) {
+    svg.on("wheel.zoom", function (event: WheelEvent) {
       event.preventDefault();
       const point = d3.pointer(event, svgRef.current);
       // Чувствительность увеличена в 1.5 раза: 0.1 * 1.5 = 0.15
@@ -646,19 +649,19 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       const tickStart = performance.now();
       const alpha = simulation.alpha();
       const timeSinceLastTick = tickStart - lastTickTime;
-      
+
       // Логируем первый тик
       if (tickCount === 1) {
         console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Первый tick callback, alpha=${alpha.toFixed(4)}`);
         firstTickTime = tickStart;
         lastTickTime = tickStart;
       }
-      
+
       // Логируем большие интервалы между тиками (>50ms) - это может быть блокировка браузера
       if (tickCount > 1 && timeSinceLastTick > 50) {
-        console.warn(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Большой интервал между тиками #${tickCount-1} и #${tickCount}: ${timeSinceLastTick.toFixed(1)}ms`);
+        console.warn(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Большой интервал между тиками #${tickCount - 1} и #${tickCount}: ${timeSinceLastTick.toFixed(1)}ms`);
       }
-      
+
       // Логируем первые 10 тиков для диагностики
       if (tickCount <= 10) {
         const timeSinceFirst = tickStart - firstTickTime;
@@ -669,14 +672,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         const timeSinceFirst = tickStart - firstTickTime;
         console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Tick #${tickCount}, alpha=${alpha.toFixed(4)}, время с первого: ${timeSinceFirst.toFixed(1)}ms, интервал: ${timeSinceLastTick.toFixed(1)}ms`);
       }
-      
+
       // Логируем стабилизацию только один раз
       if (!stabilizationLogged && alpha <= 0.001) {
         const totalTickTime = tickStart - firstTickTime;
         console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Симуляция стабилизирована после ${tickCount} тиков (alpha=${alpha.toFixed(4)}), общее время тиков: ${totalTickTime.toFixed(1)}ms`);
         stabilizationLogged = true;
       }
-      
+
       lastTickTime = tickStart;
 
       link
@@ -692,7 +695,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
       node
         .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
-      
+
       const tickEnd = performance.now();
       // Логируем медленные тики (>5ms)
       if (tickEnd - tickStart > 5) {
@@ -702,12 +705,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     function dragstarted(event: any, d: any) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
-      
+
       // Convert screen coordinates to graph coordinates considering zoom/pan
       const pointer = d3.pointer(event, container.node());
       d.fx = pointer[0];
       d.fy = pointer[1];
-      
+
       // Prevent pan when dragging node
       event.sourceEvent.stopPropagation();
     }
@@ -767,193 +770,207 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
   return (
     <div className="h-full w-full flex flex-col">
-        <div className="p-2 border-b border-slate-700 bg-slate-800">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white">Dependency Graph (L1)</h2>
-              {isDemoMode && (
-                <span className="bg-amber-900/20 border border-amber-700/30 text-amber-400 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                  <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse"></span>
-                  Demo
-                </span>
-              )}
-              {dataSource === 'cache' && !isDemoMode && (
-                <span className="bg-green-900/20 border border-green-700/30 text-green-400 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
-                  <span className="w-1 h-1 rounded-full bg-green-500"></span>
-                  Cached
-                </span>
-              )}
-              <input
-                type="text"
-                placeholder="Search by ID..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-xs text-white focus:border-blue-500 outline-none w-36"
-              />
-              {focusedNodeIds.size > 0 && (
-                <div className="flex items-center gap-1">
-                  <span className="bg-blue-900/30 border border-blue-700/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded flex flex-col gap-0.5 max-h-[3em] overflow-y-auto">
-                    <span className="shrink-0">Focus:</span>
-                    <span className="break-words">{Array.from(focusedNodeIds).map((id: string) => id.split('.').pop()).join(', ')}</span>
-                  </span>
-                  <button
-                    onClick={() => setFocusedNodeIds(new Set())}
-                    className="text-slate-400 hover:text-white text-[10px] px-0.5"
-                    title="Сбросить фокус"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+      <div className="p-2 border-b border-slate-700 bg-slate-800">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white">Dependency Graph (L1)</h2>
+          {isDemoMode && (
+            <span className="bg-amber-900/20 border border-amber-700/30 text-amber-400 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse"></span>
+              Demo
+            </span>
+          )}
+          {dataSource === 'cache' && !isDemoMode && (
+            <span className="bg-green-900/20 border border-green-700/30 text-green-400 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-green-500"></span>
+              Cached
+            </span>
+          )}
+          <input
+            type="text"
+            placeholder="Search by ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-xs text-white focus:border-blue-500 outline-none w-36"
+          />
+          <button
+            onClick={() => setIsQueryDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shadow-blue-900/20"
+            title="Natural Language Query"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            Query
+          </button>
+          {focusedNodeIds.size > 0 && (
+            <div className="flex items-center gap-1">
+              <span className="bg-blue-900/30 border border-blue-700/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded flex flex-col gap-0.5 max-h-[3em] overflow-y-auto">
+                <span className="shrink-0">Focus:</span>
+                <span className="break-words">{Array.from(focusedNodeIds).map((id: string) => id.split('.').pop()).join(', ')}</span>
+              </span>
+              <button
+                onClick={() => setFocusedNodeIds(new Set())}
+                className="text-slate-400 hover:text-white text-[10px] px-0.5"
+                title="Сбросить фокус"
+              >
+                ✕
+              </button>
             </div>
-            <div className="flex gap-2 text-[10px] flex-wrap mt-1">
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Func</div>
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Class</div>
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Method</div>
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Struct</div>
-                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-pink-500"></div> Interface</div>
-            </div>
+          )}
         </div>
-        <div className="flex-1 flex overflow-hidden relative">
-            {/* Graph area */}
-            <div className="flex-1 bg-slate-900 overflow-hidden relative">
-                <svg ref={svgRef} className="w-full h-full cursor-move"></svg>
-            </div>
-            
-            {/* Right panel - Session History */}
-            <div className={`bg-slate-800 border-l border-slate-700 flex flex-col transition-all duration-200 ${isRightPanelCollapsed ? 'w-6' : 'w-48'}`}>
-                {/* Collapse toggle */}
-                <button
-                    onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
-                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 text-[10px]"
-                    title={isRightPanelCollapsed ? 'Развернуть' : 'Свернуть'}
-                >
-                    {isRightPanelCollapsed ? '◀' : '▶'}
-                </button>
-                
-                {!isRightPanelCollapsed && (
-                    <>
-                        {/* Header */}
-                        <div className="p-2 border-b border-slate-700">
-                            <h3 className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Session Clicks</h3>
-                            <span className="text-[10px] text-slate-500">{sessionClickHistory.length} items</span>
-                        </div>
-                        
-                        {/* List */}
-                        <div className="flex-1 overflow-y-auto p-1">
-                            {sessionClickHistory.length === 0 ? (
-                                <p className="text-[10px] text-slate-500 italic p-1">No clicks yet</p>
-                            ) : (
-                                sessionClickHistory.map((nodeId, idx) => (
-                                    <div 
-                                        key={`${nodeId}-${idx}`}
-                                        className="flex items-center justify-between gap-1 p-1 hover:bg-slate-700 rounded group"
-                                    >
-                                        <button
-                                            onClick={() => openNodeModal(nodeId)}
-                                            className="text-[10px] text-slate-300 hover:text-blue-400 font-mono truncate flex-1 text-left"
-                                            title={nodeId}
-                                        >
-                                            {nodeId.split('.').pop()}
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); removeFromSessionHistory(nodeId); }}
-                                            className="text-slate-500 hover:text-red-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Удалить"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                        
-                        {/* Bottom panel with buttons */}
-                        <div className="p-2 border-t border-slate-700 space-y-1">
-                            <button
-                                className="w-full px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] rounded transition-colors"
-                                title="Build Logic"
-                            >
-                                Build Logic
-                            </button>
-                        </div>
-                    </>
+        <div className="flex gap-2 text-[10px] flex-wrap mt-1">
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Func</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Class</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Method</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Struct</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-pink-500"></div> Interface</div>
+        </div>
+      </div>
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Graph area */}
+        <div className="flex-1 bg-slate-900 overflow-hidden relative">
+          <svg ref={svgRef} className="w-full h-full cursor-move"></svg>
+        </div>
+
+        {/* Right panel - Session History */}
+        <div className={`bg-slate-800 border-l border-slate-700 flex flex-col transition-all duration-200 ${isRightPanelCollapsed ? 'w-6' : 'w-48'}`}>
+          {/* Collapse toggle */}
+          <button
+            onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
+            className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 text-[10px]"
+            title={isRightPanelCollapsed ? 'Развернуть' : 'Свернуть'}
+          >
+            {isRightPanelCollapsed ? '◀' : '▶'}
+          </button>
+
+          {!isRightPanelCollapsed && (
+            <>
+              {/* Header */}
+              <div className="p-2 border-b border-slate-700">
+                <h3 className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Session Clicks</h3>
+                <span className="text-[10px] text-slate-500">{sessionClickHistory.length} items</span>
+              </div>
+
+              {/* List */}
+              <div className="flex-1 overflow-y-auto p-1">
+                {sessionClickHistory.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 italic p-1">No clicks yet</p>
+                ) : (
+                  sessionClickHistory.map((nodeId, idx) => (
+                    <div
+                      key={`${nodeId}-${idx}`}
+                      className="flex items-center justify-between gap-1 p-1 hover:bg-slate-700 rounded group"
+                    >
+                      <button
+                        onClick={() => openNodeModal(nodeId)}
+                        className="text-[10px] text-slate-300 hover:text-blue-400 font-mono truncate flex-1 text-left"
+                        title={nodeId}
+                      >
+                        {nodeId.split('.').pop()}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeFromSessionHistory(nodeId); }}
+                        className="text-slate-500 hover:text-red-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Удалить"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
                 )}
-            </div>
-        </div>
-        
-        {/* Modal for node details */}
-        {modalNodeId && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={closeNodeModal}>
-                <div 
-                    className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-[80vw] h-[80vh] max-w-4xl flex flex-col"
-                    onClick={(e) => e.stopPropagation()}
+              </div>
+
+              {/* Bottom panel with buttons */}
+              <div className="p-2 border-t border-slate-700 space-y-1">
+                <button
+                  className="w-full px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] rounded transition-colors"
+                  title="Build Logic"
                 >
-                    {/* Modal Header */}
-                    <div className="p-3 border-b border-slate-700 flex justify-between items-start">
-                        <div>
-                            {modalItemData ? (
-                                <>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h2 className="text-base font-bold text-white font-mono">{modalItemData.id}</h2>
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-blue-900/30 border-blue-700/30 text-blue-400">
-                                            {modalItemData.type}
-                                        </span>
-                                    </div>
-                                    <div className="flex gap-3 text-[10px] text-slate-400">
-                                        <span>📄 {modalItemData.filePath}</span>
-                                        <span>🌐 {modalItemData.language}</span>
-                                    </div>
-                                </>
-                            ) : (
-                                <h2 className="text-base font-bold text-white font-mono">{modalNodeId}</h2>
-                            )}
-                        </div>
-                        <button 
-                            onClick={closeNodeModal}
-                            className="text-slate-400 hover:text-white text-lg px-2"
-                        >
-                            ✕
-                        </button>
+                  Build Logic
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Modal for node details */}
+      {modalNodeId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={closeNodeModal}>
+          <div
+            className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-[80vw] h-[80vh] max-w-4xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-3 border-b border-slate-700 flex justify-between items-start">
+              <div>
+                {modalItemData ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h2 className="text-base font-bold text-white font-mono">{modalItemData.id}</h2>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-blue-900/30 border-blue-700/30 text-blue-400">
+                        {modalItemData.type}
+                      </span>
                     </div>
-                    
-                    {/* Modal Tabs */}
-                    <div className="flex border-b border-slate-700 bg-slate-800/50">
-                        {(['L0', 'L1', 'L2'] as const).map((tab) => (
-                            <button
-                                key={tab}
-                                onClick={() => setModalActiveTab(tab)}
-                                className={`px-3 py-1.5 text-xs font-bold transition-colors ${
-                                    modalActiveTab === tab 
-                                        ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10' 
-                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                                }`}
-                            >
-                                {tab === 'L0' ? 'L0: Source Code' : tab === 'L1' ? 'L1: Connectivity' : 'L2: Semantics'}
-                            </button>
-                        ))}
+                    <div className="flex gap-3 text-[10px] text-slate-400">
+                      <span>📄 {modalItemData.filePath}</span>
+                      <span>🌐 {modalItemData.language}</span>
                     </div>
-                    
-                    {/* Modal Content */}
-                    <div className="flex-1 overflow-y-auto p-3 bg-slate-900">
-                        {loadingModalData ? (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                Loading...
-                            </div>
-                        ) : modalItemData ? (
-                            <>
-                                {modalActiveTab === 'L0' && <L0SourceView item={modalItemData} />}
-                                {modalActiveTab === 'L1' && <L1ConnectivityView item={modalItemData} usedBy={[]} />}
-                                {modalActiveTab === 'L2' && <L2SemanticsView item={modalItemData} showEmbeddings={false} />}
-                            </>
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                Failed to load data
-                            </div>
-                        )}
-                    </div>
-                </div>
+                  </>
+                ) : (
+                  <h2 className="text-base font-bold text-white font-mono">{modalNodeId}</h2>
+                )}
+              </div>
+              <button
+                onClick={closeNodeModal}
+                className="text-slate-400 hover:text-white text-lg px-2"
+              >
+                ✕
+              </button>
             </div>
-        )}
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-slate-700 bg-slate-800/50">
+              {(['L0', 'L1', 'L2'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setModalActiveTab(tab)}
+                  className={`px-3 py-1.5 text-xs font-bold transition-colors ${modalActiveTab === tab
+                    ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                >
+                  {tab === 'L0' ? 'L0: Source Code' : tab === 'L1' ? 'L1: Connectivity' : 'L2: Semantics'}
+                </button>
+              ))}
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-3 bg-slate-900">
+              {loadingModalData ? (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  Loading...
+                </div>
+              ) : modalItemData ? (
+                <>
+                  {modalActiveTab === 'L0' && <L0SourceView item={modalItemData} />}
+                  {modalActiveTab === 'L1' && <L1ConnectivityView item={modalItemData} usedBy={[]} />}
+                  {modalActiveTab === 'L2' && <L2SemanticsView item={modalItemData} showEmbeddings={false} />}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  Failed to load data
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <NaturalQueryDialog
+        isOpen={isQueryDialogOpen}
+        onClose={() => setIsQueryDialogOpen(false)}
+        onApplyResult={(res) => setSearch(res)}
+      />
     </div>
   );
 };

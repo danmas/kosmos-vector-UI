@@ -54,7 +54,7 @@ export class ApiClient {
     this.baseUrl = baseUrl;
     this.isDemoMode = demoMode;
     // Валидация контракта включена по умолчанию в development режиме
-    this.contractValidationEnabled = import.meta.env.DEV;
+    this.contractValidationEnabled = (import.meta as any).env?.DEV;
   }
 
   private async request<T>(
@@ -68,7 +68,7 @@ export class ApiClient {
 
     // Получаем context-code из глобальной переменной
     const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
-    
+
     // Формируем URL с context-code
     // Проверяем, есть ли уже query параметры в endpoint
     const hasQuery = endpoint.includes('?');
@@ -77,7 +77,7 @@ export class ApiClient {
     const baseForUrl = this.baseUrl || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
     const url = `${baseForUrl}${endpoint}${separator}context-code=${encodeURIComponent(contextCode)}`;
     const method = options.method || 'GET';
-    
+
     // Логирование запроса
     console.log('[ApiClient] Making request:', {
       method,
@@ -87,7 +87,7 @@ export class ApiClient {
       contextCode,
       hasBody: !!options.body
     });
-    
+
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
@@ -97,11 +97,11 @@ export class ApiClient {
     };
 
     const requestStartTime = Date.now();
-    
+
     try {
       const response = await fetch(url, config);
       const requestDuration = Date.now() - requestStartTime;
-      
+
       // Логирование ответа
       const contentType = response.headers.get('content-type');
       console.log('[ApiClient] Response received:', {
@@ -111,13 +111,13 @@ export class ApiClient {
         contentType: contentType || '(not set)',
         ok: response.ok
       });
-      
+
       // Собираем заголовки ответа
       const responseHeaders: Record<string, string> = {};
       response.headers.forEach((value, key) => {
         responseHeaders[key] = value;
       });
-      
+
       // Check if response is HTML (indicating Vite dev server fallback)
       if (contentType && contentType.includes('text/html')) {
         console.error('[ApiClient] Got HTML response instead of JSON - server not available or proxy issue');
@@ -134,22 +134,22 @@ export class ApiClient {
       // Читаем данные ответа (для успешных и ошибочных ответов)
       let responseData: any;
       const isJson = contentType && contentType.includes('application/json');
-      
+
       if (isJson) {
         try {
           responseData = await response.json();
           // Логируем данные ответа для диагностики
           console.log('[ApiClient] Response data:', {
             url,
-            dataKeys: responseData && typeof responseData === 'object' && !Array.isArray(responseData) 
-              ? Object.keys(responseData) 
-              : Array.isArray(responseData) 
-                ? `Array[${responseData.length}]` 
+            dataKeys: responseData && typeof responseData === 'object' && !Array.isArray(responseData)
+              ? Object.keys(responseData)
+              : Array.isArray(responseData)
+                ? `Array[${responseData.length}]`
                 : typeof responseData,
             dataType: typeof responseData,
             isArray: Array.isArray(responseData),
-            dataPreview: responseData && typeof responseData === 'object' 
-              ? JSON.stringify(responseData).substring(0, 300) 
+            dataPreview: responseData && typeof responseData === 'object'
+              ? JSON.stringify(responseData).substring(0, 300)
               : String(responseData).substring(0, 100)
           });
         } catch (e) {
@@ -170,7 +170,7 @@ export class ApiClient {
           responseData = {};
         }
       }
-      
+
       // Подготовка тела запроса для логов (если есть)
       let requestBody: any = undefined;
       if (options.body) {
@@ -180,7 +180,7 @@ export class ApiClient {
           requestBody = options.body;
         }
       }
-      
+
       // Логирование ответа в UI лог (успешный или с ошибкой HTTP) с деталями
       uiLogger.logRequest(method, url, response.status, undefined, {
         statusText: response.statusText,
@@ -202,7 +202,7 @@ export class ApiClient {
         if (!validation.valid) {
           const errorMessage = `[Contract Validator] Validation failed for ${options.method || 'GET'} ${endpoint}: ${validation.errors.join(', ')}`;
           console.error(errorMessage);
-          
+
           // Отправляем ошибку валидации в backend логи
           this.logToBackend('ERROR', errorMessage).catch(() => {
             // Игнорируем ошибки отправки логов
@@ -212,7 +212,7 @@ export class ApiClient {
           if (validation.warnings.length > 0) {
             const warningMessage = `[Contract Validator] Warnings for ${options.method || 'GET'} ${endpoint}: ${validation.warnings.join(', ')}`;
             console.warn(warningMessage);
-            this.logToBackend('WARN', warningMessage).catch(() => {});
+            this.logToBackend('WARN', warningMessage).catch(() => { });
           }
         }
       }
@@ -231,11 +231,11 @@ export class ApiClient {
         status: response.status,
         dataType: typeof responseData
       });
-      
+
       return responseData;
     } catch (error) {
       const requestDuration = Date.now() - requestStartTime;
-      
+
       // Детальное логирование ошибок
       if (error instanceof ApiError) {
         console.error('[ApiClient] ApiError:', {
@@ -244,14 +244,14 @@ export class ApiClient {
           status: error.status,
           code: error.code
         });
-        
+
         // Логируем только если это не HTTP_ERROR (HTTP ошибки уже залогированы выше при получении response)
         // Логируем SERVER_UNAVAILABLE, DEMO_MODE и другие ошибки без статуса
         if (error.code !== 'HTTP_ERROR') {
-          const errorMsg = error.status 
-            ? `HTTP ${error.status}: ${error.message}` 
+          const errorMsg = error.status
+            ? `HTTP ${error.status}: ${error.message}`
             : error.message;
-          
+
           // Подготовка тела запроса для логов (если есть)
           let requestBody: any = undefined;
           if (options.body) {
@@ -261,20 +261,20 @@ export class ApiClient {
               requestBody = options.body;
             }
           }
-          
+
           uiLogger.logRequest(method, url, error.status, errorMsg, {
             requestBody: requestBody,
             duration: requestDuration
           });
         }
-        
+
         throw error;
       }
-      
+
       // Network errors, CORS errors, etc.
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorType = error instanceof Error ? error.constructor.name : typeof error;
-      
+
       console.error('[ApiClient] Request failed:', {
         url,
         error: errorMessage,
@@ -283,7 +283,7 @@ export class ApiClient {
         endpoint,
         isNetworkError: error instanceof TypeError && error.message.includes('fetch')
       });
-      
+
       // Подготовка тела запроса для логов (если есть)
       let requestBody: any = undefined;
       if (options.body) {
@@ -293,14 +293,14 @@ export class ApiClient {
           requestBody = options.body;
         }
       }
-      
+
       // Логирование сетевой ошибки в UI лог с деталями
       uiLogger.logRequest(method, url, undefined, `Network error: ${errorMessage}`, {
         requestBody: requestBody,
         duration: requestDuration,
         errorType: errorType
       });
-      
+
       throw new ApiError(
         `Network error: ${errorMessage}`,
         0,
@@ -402,10 +402,10 @@ export class ApiClient {
     if (limit !== undefined) {
       params.append('limit', limit.toString());
     }
-    
+
     const queryString = params.toString();
     const endpoint = queryString ? `/api/pipeline/steps/history?${queryString}` : '/api/pipeline/steps/history';
-    
+
     return this.request<import('../types').PipelineStepsHistoryResponse>(endpoint);
   }
 
@@ -430,7 +430,7 @@ export class ApiClient {
     if (depth !== undefined) {
       params.append('depth', depth.toString());
     }
-    
+
     return this.request<ProjectFile[]>(`/api/project/tree?${params.toString()}`);
   }
 
@@ -466,12 +466,12 @@ export class ApiClient {
     try {
       // Используем относительный путь, который будет проксироваться через Vite на внешний сервер
       const logUrl = this.baseUrl ? `${this.baseUrl}/api/logs` : '/api/logs';
-      
+
       console.log(`[ApiClient] Sending log to backend: ${level}`, {
         url: logUrl,
         message: message.substring(0, 100)
       });
-      
+
       const response = await fetch(logUrl, {
         method: 'POST',
         headers: {
@@ -479,7 +479,7 @@ export class ApiClient {
         },
         body: JSON.stringify({ level, message }),
       });
-      
+
       if (!response.ok) {
         console.warn(`[ApiClient] Failed to send log to backend: ${response.status} ${response.statusText}`);
       } else {
@@ -496,6 +496,59 @@ export class ApiClient {
    */
   setContractValidation(enabled: boolean) {
     this.contractValidationEnabled = enabled;
+  }
+
+  // ─────────────────── Natural Query & Agent Scripts API ───────────────────
+
+  /**
+   * POST /api/v1/natural-query - основной эндпоинт для запросов на естественном языке
+   */
+  async naturalQuery(question: string): Promise<import('../types').NaturalQueryResponse> {
+    const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
+    return this.request<import('../types').NaturalQueryResponse>('/api/v1/natural-query', {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        contextCode
+      }),
+    });
+  }
+
+  /**
+   * GET /api/agent-scripts - список всех скриптов (с пагинацией)
+   */
+  async getAgentScripts(page: number = 1, limit: number = 50): Promise<import('../types').AgentScriptsResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    return this.request<import('../types').AgentScriptsResponse>(`/api/agent-scripts?${params.toString()}`);
+  }
+
+  /**
+   * GET /api/agent-scripts/{id} - детали скрипта
+   */
+  async getAgentScript(id: number): Promise<import('../types').AgentScriptDetailResponse> {
+    return this.request<import('../types').AgentScriptDetailResponse>(`/api/agent-scripts/${id}`);
+  }
+
+  /**
+   * PUT /api/agent-scripts/{id} - обновление скрипта (код и/или is_valid)
+   */
+  async updateAgentScript(id: number, updates: { script?: string; is_valid?: boolean }): Promise<import('../types').AgentScriptDetailResponse> {
+    return this.request<import('../types').AgentScriptDetailResponse>(`/api/agent-scripts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * DELETE /api/agent-scripts/{id} - удаление скрипта
+   */
+  async deleteAgentScript(id: number): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/agent-scripts/${id}`, {
+      method: 'DELETE',
+    });
   }
 }
 
@@ -539,13 +592,13 @@ export const getStatsWithFallback = async (): Promise<{ data: DashboardStats; is
   try {
     const data = await apiClient.getStats();
     // Гарантируем, что languageStats и typeStats всегда массивы
-    return { 
+    return {
       data: {
         ...data,
         languageStats: data.languageStats || [],
         typeStats: data.typeStats || []
-      }, 
-      isDemo: false 
+      },
+      isDemo: false
     };
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'SERVER_UNAVAILABLE' || error.code === 'NETWORK_ERROR')) {
@@ -589,7 +642,7 @@ export const getGraphWithFallback = async (): Promise<{ data: GraphData; isDemo:
         filePath: item.filePath,
         l2_desc: item.l2_desc
       }));
-      
+
       const links: Array<{ source: string; target: string }> = [];
       MOCK_AI_ITEMS.forEach(source => {
         source.l1_deps.forEach(targetId => {
@@ -599,7 +652,7 @@ export const getGraphWithFallback = async (): Promise<{ data: GraphData; isDemo:
           }
         });
       });
-      
+
       return { data: { nodes, links }, isDemo: true };
     }
     throw error;
@@ -629,7 +682,7 @@ export const getKbConfigWithFallback = async (): Promise<{ data: KnowledgeBaseCo
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'SERVER_UNAVAILABLE' || error.code === 'NETWORK_ERROR')) {
       console.warn('[ApiClient] getKbConfigWithFallback: API unavailable, using demo data');
-      
+
       // Возвращаем демо-конфигурацию v2.1.1
       const demoConfig: KnowledgeBaseConfig = {
         targetPath: './',
@@ -644,7 +697,7 @@ export const getKbConfigWithFallback = async (): Promise<{ data: KnowledgeBaseCo
         },
         lastUpdated: new Date().toISOString()
       };
-      
+
       return { data: demoConfig, isDemo: true };
     }
     throw error;

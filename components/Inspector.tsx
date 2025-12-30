@@ -4,6 +4,7 @@ import { getItemsListWithFallback, apiClient } from '../services/apiClient';
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
+import NaturalQueryDialog from './NaturalQueryDialog';
 
 interface InspectorProps {
   // Props are now optional since we fetch data internally
@@ -22,7 +23,8 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'L0' | 'L1' | 'L2'>('L1');
   const [dataSource, setDataSource] = useState<'cache' | 'server' | null>(null);
-  
+  const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
+
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
 
@@ -30,7 +32,7 @@ const Inspector: React.FC<InspectorProps> = () => {
   useEffect(() => {
     const loadItemsList = async () => {
       console.log(`[Inspector] loadItemsList запущен для контекста: ${currentContextCode}`);
-      
+
       // Проверяем кэш
       const cached = getItemsList();
       if (cached) {
@@ -49,22 +51,22 @@ const Inspector: React.FC<InspectorProps> = () => {
         }
         return;
       }
-      
+
       // Если кэш пуст - загружаем с сервера
       console.log(`[Inspector] Кэш пуст, загружаем с сервера...`);
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const result = await getItemsListWithFallback();
         console.log(`[Inspector] Данные получены с сервера:`, {
           count: result.data.length,
           isDemo: result.isDemo
         });
-        
+
         // Сохраняем в кэш
         setCachedItemsList(result.data, result.isDemo);
-        
+
         setItemsList(result.data);
         setIsDemoMode(result.isDemo);
         setDataSource('server');
@@ -110,10 +112,10 @@ const Inspector: React.FC<InspectorProps> = () => {
   // Поддержка regex: если поиск обёрнут в /.../ — используется регулярное выражение
   const filteredItems = useMemo(() => {
     const trimmedSearch = search.trim();
-    
+
     // Проверяем, является ли это regex-паттерном: /pattern/ или /pattern/flags
     const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
-    
+
     if (regexMatch) {
       try {
         const regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
@@ -125,7 +127,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         return [];
       }
     }
-    
+
     // Обычный поиск через includes
     const searchLower = trimmedSearch.toLowerCase();
     return itemsList.filter(item =>
@@ -140,14 +142,14 @@ const Inspector: React.FC<InspectorProps> = () => {
     const newIds = filteredItems.map((item: AiItemSummary) => item.id);
     const newIdsSet = new Set<string>(newIds);
     const prevIds = prevFilteredIdsRef.current;
-    
+
     // Быстрая проверка: если размеры разные — точно изменилось
     if (prevIds.size !== newIds.length) {
       prevFilteredIdsRef.current = newIdsSet;
       setFilteredItemIds(newIdsSet);
       return;
     }
-    
+
     // Проверяем содержимое
     let hasChanges = false;
     for (const id of newIds) {
@@ -156,12 +158,12 @@ const Inspector: React.FC<InspectorProps> = () => {
         break;
       }
     }
-    
+
     // Если изменений нет, не обновляем контекст
     if (!hasChanges) {
       return;
     }
-    
+
     prevFilteredIdsRef.current = newIdsSet;
     setFilteredItemIds(newIdsSet);
   }, [filteredItems, setFilteredItemIds]);
@@ -227,22 +229,33 @@ const Inspector: React.FC<InspectorProps> = () => {
               )}
             </div>
           </div>
-          <input 
-            type="text" 
-            placeholder="Search ID or File... (/regex/)" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Search ID or File... (/regex/)"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
+            />
+            <button
+              onClick={() => setIsQueryDialogOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded transition-colors flex items-center gap-1 shadow-lg"
+              title="Natural Language Query"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Query
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {filteredItems.map(item => (
-            <div 
+            <div
               key={item.id}
               onClick={() => setSelectedId(item.id)}
-              className={`p-3 border-b border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors ${
-                selectedId === item.id ? 'bg-blue-900/20 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
-              }`}
+              className={`p-3 border-b border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors ${selectedId === item.id ? 'bg-blue-900/20 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
+                }`}
             >
               <div className="flex justify-between items-start mb-1">
                 <span className="text-slate-200 font-mono text-sm font-bold truncate w-48" title={item.id}>
@@ -251,10 +264,10 @@ const Inspector: React.FC<InspectorProps> = () => {
                 <span className="text-[10px] uppercase text-slate-500">{item.language}</span>
               </div>
               <div className="flex items-center gap-2">
-                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getBadgeColor(item.type)}`}>
-                   {item.type}
-                 </span>
-                 <span className="text-xs text-slate-500 truncate">{item.filePath}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getBadgeColor(item.type)}`}>
+                  {item.type}
+                </span>
+                <span className="text-xs text-slate-500 truncate">{item.filePath}</span>
               </div>
             </div>
           ))}
@@ -293,11 +306,10 @@ const Inspector: React.FC<InspectorProps> = () => {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 text-xs font-bold transition-colors ${
-                    activeTab === tab 
-                      ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10' 
+                  className={`px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === tab
+                      ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
+                    }`}
                 >
                   {tab === 'L0' ? 'L0: Source Code' : tab === 'L1' ? 'L1: Connectivity' : 'L2: Semantics'}
                 </button>
@@ -321,6 +333,11 @@ const Inspector: React.FC<InspectorProps> = () => {
           </div>
         )}
       </div>
+      <NaturalQueryDialog
+        isOpen={isQueryDialogOpen}
+        onClose={() => setIsQueryDialogOpen(false)}
+        onApplyResult={(res) => setSearch(res)}
+      />
     </div>
   );
 };

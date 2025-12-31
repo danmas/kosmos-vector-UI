@@ -1,6 +1,6 @@
 {
   "name": "@aiitem/ui-components",
-  "version": "1.0.0",
+  "version": "2.2.1",
   "description": "Reusable UI components for AiItem RAG architecture projects",
   "type": "module",
   "main": "dist/lib/index.js",

@@ -58,15 +58,18 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
 
     // Filter suggestions based on input
     useEffect(() => {
-        if (question.trim().length > 0 && showSuggestions) {
-            const lowQuestion = question.toLowerCase();
-            const filtered = allScripts.filter(s =>
-                s.question.toLowerCase().includes(lowQuestion)
-            );
-            // Deduplicate by question text
+        if (showSuggestions) {
+            const lowQuestion = question.toLowerCase().trim();
+            let filtered = allScripts;
+
+            if (lowQuestion.length > 0) {
+                filtered = allScripts.filter(s =>
+                    s.question.toLowerCase().includes(lowQuestion)
+                );
+            }
+
             const unique = Array.from(new Map(filtered.map(item => [item.question.toLowerCase(), item])).values());
             setFilteredSuggestions(unique);
-            setSelectedIndex(-1);
         } else {
             setFilteredSuggestions([]);
             setSelectedIndex(-1);
@@ -113,11 +116,17 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         setQuestion(suggestionText);
         setShowSuggestions(false);
         setSelectedIndex(-1);
-        // Focus back on input to allow editing
         inputRef.current?.focus();
     };
 
     const onKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'ArrowDown' && !showSuggestions) {
+            if (allScripts.length > 0) {
+                setShowSuggestions(true);
+                return;
+            }
+        }
+
         if (!showSuggestions || filteredSuggestions.length === 0) {
             if (e.key === 'Enter') {
                 handleQuery();
@@ -160,6 +169,49 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
             onApplyResult(filterValue);
             onClose();
         }
+    };
+
+    const copyScript = () => {
+        if (scriptDetails?.script) {
+            navigator.clipboard.writeText(scriptDetails.script);
+        }
+    };
+
+    // Simple syntax highligher
+    const renderHighlightedCode = (code: string) => {
+        if (!code) return null;
+
+        // Split by primary tokens: keywords, strings (incl. backticks), and comments
+        const parts = code.split(/(\b(?:async|function|const|let|var|await|return|if|else|for|while|try|catch|finally)\b|\`[\s\S]*?\`|\".*?\"|\'.*?\'|\/\/.*)/g);
+
+        return parts.map((part, i) => {
+            if (!part) return null;
+
+            // Keywords
+            if (/^\b(async|function|const|let|var|await|return|if|else|for|while|try|catch|finally)\b$/.test(part)) {
+                return <span key={i} className="text-purple-400 font-bold">{part}</span>;
+            }
+            // Template literals (SQL)
+            if (part.startsWith('`')) {
+                return <span key={i} className="text-emerald-400">{part}</span>;
+            }
+            // Strings
+            if (part.startsWith('"') || part.startsWith("'")) {
+                return <span key={i} className="text-amber-300">{part}</span>;
+            }
+            // Comments
+            if (part.startsWith('//')) {
+                return <span key={i} className="text-slate-500 italic">{part}</span>;
+            }
+            // Objects/Services
+            const subparts = part.split(/(\b(?:DbService|ApiClient|JSON|Object|Array)\b)/g);
+            return subparts.map((sub, j) => {
+                if (/^(DbService|ApiClient|JSON|Object|Array)$/.test(sub)) {
+                    return <span key={`${i}-${j}`} className="text-yellow-400">{sub}</span>;
+                }
+                return <span key={`${i}-${j}`} className="text-blue-200/80">{sub}</span>;
+            });
+        });
     };
 
     // Dragging logic
@@ -235,7 +287,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                             </svg>
                         </div>
-                        <h2 className="text-sm font-bold text-white tracking-wide">Natural Query</h2>
+                        <h2 className="text-sm font-bold text-white tracking-wide text-shadow-sm">Natural Query</h2>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -271,15 +323,15 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                             {showSuggestions && filteredSuggestions.length > 0 && (
                                 <div
                                     ref={suggestionsRef}
-                                    className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in duration-200"
+                                    className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in duration-200"
                                 >
                                     {filteredSuggestions.map((suggestion, index) => (
                                         <button
                                             key={suggestion.id}
                                             onClick={() => selectSuggestion(suggestion.question)}
                                             className={`w-full text-left px-3 py-2 text-[10px] transition-colors border-b border-slate-700 last:border-0 ${selectedIndex === index
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                                                 }`}
                                         >
                                             {suggestion.question}
@@ -291,7 +343,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                         <button
                             onClick={() => handleQuery()}
                             disabled={isLoading || !question.trim()}
-                            className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-[10px] font-bold py-1.5 px-3 rounded transition-all shadow-md active:scale-95 flex items-center gap-1"
+                            className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-[10px] font-bold py-1.5 px-3 rounded transition-all shadow-md active:scale-95 flex items-center gap-1 active:bg-blue-700"
                         >
                             <span>Run</span>
                         </button>
@@ -309,8 +361,8 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                         key={tab}
                                         onClick={() => setActiveTab(tab)}
                                         className={`px-4 py-1.5 text-[10px] font-bold transition-all border-b-2 capitalize shadow-sm ${activeTab === tab
-                                                ? 'text-blue-400 border-blue-400 bg-blue-900/10'
-                                                : 'text-slate-500 border-transparent hover:text-slate-300 hover:bg-slate-700/30'
+                                            ? 'text-blue-400 border-blue-400 bg-blue-900/10'
+                                            : 'text-slate-500 border-transparent hover:text-slate-300 hover:bg-slate-700/30'
                                             }`}
                                     >
                                         {tab === 'result' ? 'Interpretation' : tab === 'script' ? 'Agent Script' : 'Raw Data'}
@@ -319,7 +371,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                             </div>
 
                             {/* Tab Content */}
-                            <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50">
+                            <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50 scrollbar-thin scrollbar-thumb-slate-700">
                                 {activeTab === 'result' && (
                                     <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
                                         <div className="bg-slate-800/60 border border-slate-700 rounded p-3 shadow-inner">
@@ -352,13 +404,24 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 {activeTab === 'script' && (
                                     <div className="animate-in fade-in slide-in-from-bottom-1 duration-200 h-full flex flex-col gap-2">
                                         {scriptDetails ? (
-                                            <div className="flex-1 flex flex-col bg-slate-950 rounded border border-slate-700 overflow-hidden">
-                                                <div className="bg-slate-800 px-2 py-1 border-b border-slate-700 flex justify-between items-center shrink-0">
-                                                    <span className="text-[9px] font-mono text-slate-500">script_id: {scriptDetails.id}</span>
-                                                    <span className="text-[8px] bg-blue-500/10 text-blue-400 px-1 py-0.5 rounded border border-blue-500/20 font-bold uppercase">JS</span>
+                                            <div className="flex-1 flex flex-col bg-slate-950 rounded border border-slate-700 overflow-hidden shadow-inner">
+                                                <div className="bg-slate-800/80 px-2 py-1 border-b border-slate-700 flex justify-between items-center shrink-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] font-mono text-slate-500">ID: {scriptDetails.id}</span>
+                                                        <span className="text-[8px] bg-blue-500/10 text-blue-400 px-1 py-0.5 rounded border border-blue-500/20 font-bold">JS</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={copyScript}
+                                                        className="text-[9px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-700/50 px-1.5 py-0.5 rounded transition-colors border border-slate-600"
+                                                    >
+                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                        </svg>
+                                                        Copy
+                                                    </button>
                                                 </div>
-                                                <pre className="flex-1 overflow-auto p-2.5 text-[10px] font-mono text-blue-300/80 leading-normal selection:bg-blue-500/30">
-                                                    <code>{scriptDetails.script}</code>
+                                                <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed selection:bg-blue-500/30 whitespace-pre-wrap break-all">
+                                                    <code>{renderHighlightedCode(scriptDetails.script)}</code>
                                                 </pre>
                                             </div>
                                         ) : (

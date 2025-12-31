@@ -156,9 +156,32 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         if (response?.raw) {
             let filterValue = '';
             if (Array.isArray(response.raw)) {
-                filterValue = response.raw.map((item: any) => item.id || item.name || item.source || item.target || JSON.stringify(item)).join('|');
-                if (filterValue.length > 200) {
-                    filterValue = filterValue.substring(0, 200) + '...';
+                // Extract best identifier from each object
+                const items = response.raw.map((item: any) => {
+                    if (typeof item === 'string') return item;
+                    // Priority list of keys that usually contain the name/id
+                    const idKeys = ['function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
+                    for (const key of idKeys) {
+                        if (item[key]) return String(item[key]);
+                    }
+                    // Fallback: use the first string value found in the object
+                    const stringVal = Object.values(item).find(v => typeof v === 'string');
+                    if (stringVal) return String(stringVal);
+
+                    return JSON.stringify(item);
+                });
+
+                // Unique items only
+                const uniqueItems = Array.from(new Set(items));
+
+                // Join with anchors for exact matching and wrap in slashes for regex mode
+                const regexContent = uniqueItems.map(item => `^${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).join('|');
+                filterValue = `/${regexContent}/i`;
+
+                // Limit length to avoid breaking UI (approx 500 chars)
+                if (filterValue.length > 500) {
+                    const truncatedRegex = uniqueItems.slice(0, 5).map(item => `^${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).join('|');
+                    filterValue = `/${truncatedRegex}/i`;
                 }
             } else if (typeof response.raw === 'string') {
                 filterValue = response.raw;

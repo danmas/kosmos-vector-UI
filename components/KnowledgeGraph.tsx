@@ -351,10 +351,16 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         searchPattern += '.*';
         i++;
       } else {
-        // Обычный символ - экранируем спецсимволы regex
+        // Обычный символ - экранируем спецсимволы regex, кроме |, ^, $ (для поддержки OR и якорей)
         const char = search[i];
-        if (/[.+?^${}()|[\]\\]/.test(char)) {
-          searchPattern += '\\' + char;
+        if (/[.+?{}()|[\]\\]/.test(char)) {
+          // Исключаем ^ и $ из автоматического экранирования в этом блоке, 
+          // так как они часто нужны как якоря при передаче списка ID
+          if (char === '^' || char === '$' || char === '|') {
+            searchPattern += char;
+          } else {
+            searchPattern += '\\' + char;
+          }
         } else {
           searchPattern += char;
         }
@@ -362,7 +368,20 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       }
     }
 
-    const regex = new RegExp(searchPattern, 'i');
+    // Проверяем, является ли это уже явным регулярным выражением (начинается и заканчивается на /)
+    const regexMatch = search.match(/^\/(.+)\/([gimsuy]*)$/);
+    let regex: RegExp;
+
+    if (regexMatch) {
+      try {
+        regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
+      } catch (e) {
+        console.error('Invalid regex in search:', e);
+        regex = new RegExp(searchPattern, 'i');
+      }
+    } else {
+      regex = new RegExp(searchPattern, 'i');
+    }
 
     const filteredNodes = filteredGraphData.nodes.filter(node =>
       regex.test(node.id)

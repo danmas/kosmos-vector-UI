@@ -20,6 +20,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const [allScripts, setAllScripts] = useState<AgentScript[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [filteredSuggestions, setFilteredSuggestions] = useState<AgentScript[]>([]);
+    const [selectedIndex, setSelectedIndex] = useState(-1);
 
     // Position and Size state
     const [position, setPosition] = useState({ x: window.innerWidth - 530, y: 64 });
@@ -31,6 +32,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const dragStartRef = useRef({ x: 0, y: 0 });
     const sizeStartRef = useRef({ width: 0, height: 0 });
     const suggestionsRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     // Fetch scripts on open
     useEffect(() => {
@@ -59,12 +61,15 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         if (question.trim().length > 0 && showSuggestions) {
             const lowQuestion = question.toLowerCase();
             const filtered = allScripts.filter(s =>
-                s.question.toLowerCase().includes(lowQuestion) &&
-                s.question.toLowerCase() !== lowQuestion
+                s.question.toLowerCase().includes(lowQuestion)
             );
-            setFilteredSuggestions(filtered);
+            // Deduplicate by question text
+            const unique = Array.from(new Map(filtered.map(item => [item.question.toLowerCase(), item])).values());
+            setFilteredSuggestions(unique);
+            setSelectedIndex(-1);
         } else {
             setFilteredSuggestions([]);
+            setSelectedIndex(-1);
         }
     }, [question, allScripts, showSuggestions]);
 
@@ -101,6 +106,40 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
             setError(err instanceof Error ? err.message : 'Unknown error occurred');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const selectSuggestion = (suggestionText: string) => {
+        setQuestion(suggestionText);
+        setShowSuggestions(false);
+        setSelectedIndex(-1);
+        // Focus back on input to allow editing
+        inputRef.current?.focus();
+    };
+
+    const onKeyDown = (e: React.KeyboardEvent) => {
+        if (!showSuggestions || filteredSuggestions.length === 0) {
+            if (e.key === 'Enter') {
+                handleQuery();
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSelectedIndex(prev => (prev < filteredSuggestions.length - 1 ? prev + 1 : prev));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
+        } else if (e.key === 'Enter') {
+            if (selectedIndex >= 0) {
+                e.preventDefault();
+                selectSuggestion(filteredSuggestions[selectedIndex].question);
+            } else {
+                handleQuery();
+            }
+        } else if (e.key === 'Escape') {
+            setShowSuggestions(false);
         }
     };
 
@@ -210,6 +249,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                     <div className="flex gap-2">
                         <div className="flex-1 relative">
                             <input
+                                ref={inputRef}
                                 type="text"
                                 value={question}
                                 onFocus={() => setShowSuggestions(true)}
@@ -217,7 +257,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                     setQuestion(e.target.value);
                                     setShowSuggestions(true);
                                 }}
-                                onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
+                                onKeyDown={onKeyDown}
                                 placeholder="Ask about the codebase..."
                                 className="w-full bg-slate-950 border border-slate-600 rounded py-1.5 px-3 text-xs text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 shadow-inner"
                             />
@@ -233,11 +273,14 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                     ref={suggestionsRef}
                                     className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in duration-200"
                                 >
-                                    {filteredSuggestions.map((suggestion) => (
+                                    {filteredSuggestions.map((suggestion, index) => (
                                         <button
                                             key={suggestion.id}
-                                            onClick={() => handleQuery(suggestion.question)}
-                                            className="w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700 last:border-0"
+                                            onClick={() => selectSuggestion(suggestion.question)}
+                                            className={`w-full text-left px-3 py-2 text-[10px] transition-colors border-b border-slate-700 last:border-0 ${selectedIndex === index
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                                }`}
                                         >
                                             {suggestion.question}
                                         </button>

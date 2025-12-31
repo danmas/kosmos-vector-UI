@@ -16,6 +16,11 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const [scriptDetails, setScriptDetails] = useState<AgentScript | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // Suggestions state
+    const [allScripts, setAllScripts] = useState<AgentScript[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [filteredSuggestions, setFilteredSuggestions] = useState<AgentScript[]>([]);
+
     // Position and Size state
     const [position, setPosition] = useState({ x: window.innerWidth - 530, y: 64 });
     const [size, setSize] = useState({ width: 512, height: 400 });
@@ -25,14 +30,65 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const isResizingRef = useRef(false);
     const dragStartRef = useRef({ x: 0, y: 0 });
     const sizeStartRef = useRef({ width: 0, height: 0 });
+    const suggestionsRef = useRef<HTMLDivElement>(null);
 
-    const handleQuery = async () => {
-        if (!question.trim()) return;
+    // Fetch scripts on open
+    useEffect(() => {
+        if (isOpen) {
+            const fetchScripts = async () => {
+                try {
+                    const res = await apiClient.getAgentScripts(1, 100);
+                    if (res.success) {
+                        setAllScripts(res.scripts);
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch scripts:', err);
+                }
+            };
+            fetchScripts();
+        }
+    }, [isOpen]);
 
+    // Handle initial position on mount
+    useEffect(() => {
+        setPosition({ x: window.innerWidth - 530, y: 64 });
+    }, []);
+
+    // Filter suggestions based on input
+    useEffect(() => {
+        if (question.trim().length > 0 && showSuggestions) {
+            const lowQuestion = question.toLowerCase();
+            const filtered = allScripts.filter(s =>
+                s.question.toLowerCase().includes(lowQuestion) &&
+                s.question.toLowerCase() !== lowQuestion
+            );
+            setFilteredSuggestions(filtered);
+        } else {
+            setFilteredSuggestions([]);
+        }
+    }, [question, allScripts, showSuggestions]);
+
+    // Click outside suggestions to close
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleQuery = async (queryToUse?: string) => {
+        const finalQuestion = queryToUse || question;
+        if (!finalQuestion.trim()) return;
+
+        setQuestion(finalQuestion);
+        setShowSuggestions(false);
         setIsLoading(true);
         setError(null);
         try {
-            const res = await apiClient.naturalQuery(question);
+            const res = await apiClient.naturalQuery(finalQuestion);
             setResponse(res);
 
             if (res.scriptId) {
@@ -69,7 +125,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
 
     // Dragging logic
     const onMouseDownDrag = (e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('button')) return; // Don't drag if clicking buttons
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return;
         isDraggingRef.current = true;
         dragStartRef.current = { x: e.clientX - position.x, y: e.clientY - position.y };
         e.preventDefault();
@@ -150,13 +206,17 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                 </div>
 
                 {/* Query Input Area */}
-                <div className="p-3 bg-slate-800/30 border-b border-slate-700 shrink-0">
+                <div className="p-3 bg-slate-800/30 border-b border-slate-700 shrink-0 relative z-20">
                     <div className="flex gap-2">
                         <div className="flex-1 relative">
                             <input
                                 type="text"
                                 value={question}
-                                onChange={(e) => setQuestion(e.target.value)}
+                                onFocus={() => setShowSuggestions(true)}
+                                onChange={(e) => {
+                                    setQuestion(e.target.value);
+                                    setShowSuggestions(true);
+                                }}
                                 onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
                                 placeholder="Ask about the codebase..."
                                 className="w-full bg-slate-950 border border-slate-600 rounded py-1.5 px-3 text-xs text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-600 shadow-inner"
@@ -166,9 +226,27 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                     <div className="animate-spin rounded-full h-3.5 w-3.5 border-b border-blue-500"></div>
                                 </div>
                             )}
+
+                            {/* Suggestions Dropdown */}
+                            {showSuggestions && filteredSuggestions.length > 0 && (
+                                <div
+                                    ref={suggestionsRef}
+                                    className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in duration-200"
+                                >
+                                    {filteredSuggestions.map((suggestion) => (
+                                        <button
+                                            key={suggestion.id}
+                                            onClick={() => handleQuery(suggestion.question)}
+                                            className="w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700 last:border-0"
+                                        >
+                                            {suggestion.question}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <button
-                            onClick={handleQuery}
+                            onClick={() => handleQuery()}
                             disabled={isLoading || !question.trim()}
                             className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-[10px] font-bold py-1.5 px-3 rounded transition-all shadow-md active:scale-95 flex items-center gap-1"
                         >
@@ -178,7 +256,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 flex flex-col min-h-0 relative z-10">
                     {response ? (
                         <>
                             {/* Tabs */}

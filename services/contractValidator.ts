@@ -47,7 +47,7 @@ export function validateApiResponse(
 
     // Дополнительные поля для NaturalQueryErrorResponse (опционально для валидатора)
     // Мы не требуем их наличия во всех ошибках, но позволяем им быть там
-    const allowedErrorFields = ['success', 'error', 'human', 'scriptId', 'script', 'cached'];
+    const allowedErrorFields = ['success', 'error', 'human', 'scriptId', 'script', 'cached', 'last_result'];
     const extraFields = Object.keys(responseData).filter(f => !allowedErrorFields.includes(f));
     if (extraFields.length > 0 && normalizedPath === '/api/v1/natural-query') {
       // Для Natural Query мы позволяем эти поля, но если есть другие - предупреждаем

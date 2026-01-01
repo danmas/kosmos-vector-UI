@@ -128,9 +128,10 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                     setResponse({
                         success: false,
                         human: err.data.human,
-                        raw: null,
+                        raw: err.data.last_result?.raw || null,
                         scriptId: err.data.scriptId,
-                        cached: err.data.cached || false
+                        cached: err.data.cached || false,
+                        last_result: err.data.last_result
                     } as any);
                 }
             } else {
@@ -141,11 +142,55 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         }
     };
 
-    const selectSuggestion = (suggestionText: string) => {
-        setQuestion(suggestionText);
-        setShowSuggestions(false);
-        setSelectedIndex(-1);
-        inputRef.current?.focus();
+    const selectSuggestion = async (suggestion: AgentScript) => {
+        setQuestion(suggestion.question);
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // Загружаем полные данные скрипта, включая возможный last_result
+            const res = await apiClient.getAgentScript(suggestion.id);
+            if (res.success) {
+                const fullScript = res.script;
+                setScriptDetails(fullScript);
+
+                if (fullScript.last_result) {
+                    setResponse({
+                        success: true,
+                        human: fullScript.last_result.human,
+                        raw: fullScript.last_result.raw,
+                        scriptId: fullScript.id,
+                        cached: true,
+                        last_result: fullScript.last_result
+                    });
+                    setActiveTab('result');
+                } else {
+                    // Если результатов еще нет, показываем готовность
+                    setResponse(null);
+                    setActiveTab('result');
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching script details:', err);
+            // Fallback на данные из списка
+            setScriptDetails(suggestion);
+            if (suggestion.last_result) {
+                setResponse({
+                    success: true,
+                    human: suggestion.last_result.human,
+                    raw: suggestion.last_result.raw,
+                    scriptId: suggestion.id,
+                    cached: true,
+                    last_result: suggestion.last_result
+                });
+                setActiveTab('result');
+            }
+        } finally {
+            setIsLoading(false);
+            setShowSuggestions(false);
+            setSelectedIndex(-1);
+            inputRef.current?.focus();
+        }
     };
 
     const onKeyDown = (e: React.KeyboardEvent) => {
@@ -172,7 +217,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         } else if (e.key === 'Enter') {
             if (selectedIndex >= 0) {
                 e.preventDefault();
-                selectSuggestion(filteredSuggestions[selectedIndex].question);
+                selectSuggestion(filteredSuggestions[selectedIndex]);
             } else {
                 handleQuery();
             }
@@ -245,7 +290,6 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
 
             console.log('[NaturalQueryDialog] Applying filter value:', filterValue);
             onApplyResult(filterValue);
-            onClose();
         } else {
             console.log('[NaturalQueryDialog] No raw data to apply');
         }
@@ -408,7 +452,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                     {filteredSuggestions.map((suggestion, index) => (
                                         <button
                                             key={suggestion.id}
-                                            onClick={() => selectSuggestion(suggestion.question)}
+                                            onClick={() => selectSuggestion(suggestion)}
                                             className={`w-full text-left px-3 py-2 text-[10px] transition-colors border-b border-slate-700 last:border-0 ${selectedIndex === index
                                                 ? 'bg-blue-600 text-white'
                                                 : 'text-slate-300 hover:bg-slate-700 hover:text-white'
@@ -462,9 +506,19 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
 
                                         <div className="flex justify-between items-center">
                                             {response.cached ? (
-                                                <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
-                                                    Cached
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
+                                                        Cached
+                                                    </div>
+                                                    {response.last_result?.executed_at && (
+                                                        <div className="text-[8px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            {new Date(response.last_result.executed_at).toLocaleString()}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : <div />}
 

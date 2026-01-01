@@ -214,6 +214,11 @@ export interface NaturalQueryResponse {
   raw: any;
   scriptId: number | null;
   cached: boolean;
+  last_result?: {
+    raw: any;
+    human: string;
+    executed_at: string;
+  } | null;
 }
 
 export interface NaturalQueryErrorResponse {
@@ -223,6 +228,11 @@ export interface NaturalQueryErrorResponse {
   scriptId: number | null;
   script: string | null;
   cached: boolean;
+  last_result?: {
+    raw: any;
+    human: string;
+    executed_at: string;
+  } | null;
 }
 
 export interface AgentScript {
@@ -234,6 +244,11 @@ export interface AgentScript {
   is_valid: boolean;
   created_at: string;
   updated_at: string;
+  last_result?: {
+    raw: any;
+    human: string;
+    executed_at: string;
+  } | null;
 }
 
 export interface AgentScriptsResponse {

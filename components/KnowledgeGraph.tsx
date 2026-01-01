@@ -33,7 +33,15 @@ const getAbsoluteTime = () => {
 };
 
 const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
-  const { filteredItemIds, setFilteredItemIds, graphSearch, setGraphSearch, filterHistory, clearHistory } = useGraphFilter();
+  const {
+    filteredItemIds,
+    setFilteredItemIds,
+    graphSearch,
+    setGraphSearch,
+    inspectorSearch,
+    filterHistory,
+    clearHistory
+  } = useGraphFilter();
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
 
@@ -206,185 +214,133 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
   }, [graphData]);
 
-  // Фильтрация графа на основе filteredItemIds из контекста
+  // Базовая фильтрация - теперь это просто мостик к полной базе данных,
+  // чтобы не ломать логику зависимых useMemo, но мы убираем здесь жесткое ограничение
   const filteredGraphData = useMemo(() => {
-    const memoStart = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo вызван`, {
-      graphDataNodes: graphData?.nodes.length,
-      filteredItemIdsSize: filteredItemIds.size
-    });
-
-    if (!graphData || graphData.nodes.length === 0) {
-      const memoEnd = performance.now();
-      console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo filteredGraphData: ${(memoEnd - memoStart).toFixed(1)}ms (ранний выход)`);
-      return null;
-    }
-
-    // Если фильтр пуст, показываем весь граф (обратная совместимость)
-    if (filteredItemIds.size === 0) {
-      const memoEnd = performance.now();
-      console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo filteredGraphData: ${(memoEnd - memoStart).toFixed(1)}ms (без фильтра)`);
-      return graphData;
-    }
-
-    // Фильтруем узлы - только те, чьи ID есть в filteredItemIds
-    const filteredNodes = graphData.nodes.filter(node =>
-      filteredItemIds.has(node.id)
-    );
-
-    // Создаем Set для быстрого поиска отфильтрованных узлов
-    const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-
-    // Фильтруем связи - только те, где и source и target есть в отфильтрованных узлах
-    const filteredLinks = graphData.links.filter(link =>
-      filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target)
-    );
-
-    const result = {
-      nodes: filteredNodes,
-      links: filteredLinks
-    };
-
-    const memoEnd = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo filteredGraphData: ${(memoEnd - memoStart).toFixed(1)}ms`);
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useMemo результат:`, {
-      nodes: result.nodes.length,
-      links: result.links.length
-    });
-
-    return result;
-  }, [graphData, filteredItemIds]);
+    return graphData;
+  }, [graphData]);
 
   // Дополнительная фильтрация по поисковому запросу
   const finalFilteredGraphData = useMemo(() => {
-    if (!filteredGraphData || !graphSearch.trim()) {
-      return filteredGraphData;
-    }
+    if (!graphData || graphData.nodes.length === 0) return null;
 
-    // Преобразуем паттерн в регулярное выражение
-    // Поддерживаем:
-    // - ~X - исключает один символ X
-    // - ~[...] - исключает последовательность символов (слово)
-    //   * Если ~[...] стоит перед текстом: negative lookbehind - текст не должен идти после этой последовательности
-    //   * Если ~[...] стоит после текста: negative lookahead - после текста не должна идти эта последовательность
-    // - * - wildcard (любой набор символов)
-
-    // Функция для экранирования символов regex
-    const escapeRegex = (str: string) => str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-
-    // Функция для обработки текста (с учетом * и ~X, но без ~[...])
-    const processText = (text: string): string => {
-      let result = '';
-      let j = 0;
-      while (j < text.length) {
-        if (text[j] === '~' && j + 1 < text.length && text[j + 1] !== '[') {
-          // ~X
-          const char = text[j + 1];
-          result += `[^${escapeRegex(char)}]`;
-          j += 2;
-        } else if (text[j] === '*') {
-          result += '.*';
-          j++;
-        } else {
-          const char = text[j];
-          if (/[.+?^${}()|[\]\\]/.test(char)) {
-            result += '\\' + char;
+    // 1. Подготавливаем регулярку для поиска в САМОМ ГРАФЕ
+    let graphRegex: RegExp | null = null;
+    if (graphSearch.trim()) {
+      const escapeRegex = (str: string) => str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+      const processText = (text: string): string => {
+        let result = '';
+        let j = 0;
+        while (j < text.length) {
+          if (text[j] === '~' && j + 1 < text.length && text[j + 1] !== '[') {
+            const char = text[j + 1];
+            result += `[^${escapeRegex(char)}]`;
+            j += 2;
+          } else if (text[j] === '*') {
+            result += '.*';
+            j++;
           } else {
-            result += char;
-          }
-          j++;
-        }
-      }
-      return result;
-    };
-
-    let searchPattern = '';
-    let i = 0;
-
-    while (i < graphSearch.length) {
-      if (graphSearch[i] === '~' && i + 1 < graphSearch.length && graphSearch[i + 1] === '[') {
-        const excludeStart = i;
-        i += 2;
-        let sequence = '';
-        while (i < graphSearch.length && graphSearch[i] !== ']') {
-          if (graphSearch[i] === '\\' && i + 1 < graphSearch.length) {
-            sequence += graphSearch[i] + graphSearch[i + 1];
-            i += 2;
-          } else if (graphSearch[i] !== ']') {
-            sequence += graphSearch[i];
-            i++;
-          } else {
-            break;
+            const char = text[j];
+            if (/[.+?^${}()|[\]\\]/.test(char)) {
+              result += '\\' + char;
+            } else {
+              result += char;
+            }
+            j++;
           }
         }
-        if (i < graphSearch.length && graphSearch[i] === ']') {
-          i++;
-          const escapedSeq = escapeRegex(sequence);
-          const textBefore = graphSearch.slice(0, excludeStart);
-          const textAfter = graphSearch.slice(i);
+        return result;
+      };
 
-          if (textBefore.length > 0 && textAfter.length > 0) {
-            const processedBefore = processText(textBefore);
-            const processedAfter = processText(textAfter);
-            searchPattern += `${processedBefore}(?!${escapedSeq})${processedAfter}`;
-            i = graphSearch.length;
-          } else if (textBefore.length > 0) {
-            const processedBefore = processText(textBefore);
-            searchPattern += `${processedBefore}(?!${escapedSeq}).*`;
-            i = graphSearch.length;
-          } else if (textAfter.length > 0) {
-            const processedAfter = processText(textAfter);
-            searchPattern += `(?<!${escapedSeq})${processedAfter}`;
-            i = graphSearch.length;
-          } else {
-            searchPattern += `(?!.*${escapedSeq})`;
-          }
-        }
-      } else if (graphSearch[i] === '~') {
-        if (i + 1 < graphSearch.length) {
-          const char = graphSearch[i + 1];
-          const escapedChar = char.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-          searchPattern += `[^${escapedChar}]`;
+      let searchPattern = '';
+      let i = 0;
+      while (i < graphSearch.length) {
+        if (graphSearch[i] === '~' && i + 1 < graphSearch.length && graphSearch[i + 1] === '[') {
+          const excludeStart = i;
           i += 2;
-        } else {
-          searchPattern += '\\~';
+          let sequence = '';
+          while (i < graphSearch.length && graphSearch[i] !== ']') {
+            if (graphSearch[i] === '\\' && i + 1 < graphSearch.length) {
+              sequence += graphSearch[i] + graphSearch[i + 1];
+              i += 2;
+            } else if (graphSearch[i] !== ']') {
+              sequence += graphSearch[i];
+              i++;
+            } else {
+              break;
+            }
+          }
+          if (i < graphSearch.length && graphSearch[i] === ']') {
+            i++;
+            const escapedSeq = escapeRegex(sequence);
+            const textBefore = graphSearch.slice(0, excludeStart);
+            const textAfter = graphSearch.slice(i);
+            if (textBefore.length > 0 && textAfter.length > 0) {
+              searchPattern += `${processText(textBefore)}(?!${escapedSeq})${processText(textAfter)}`;
+              i = graphSearch.length;
+            } else if (textBefore.length > 0) {
+              searchPattern += `${processText(textBefore)}(?!${escapedSeq}).*`;
+              i = graphSearch.length;
+            } else if (textAfter.length > 0) {
+              searchPattern += `(?<!${escapedSeq})${processText(textAfter)}`;
+              i = graphSearch.length;
+            } else {
+              searchPattern += `(?!.*${escapedSeq})`;
+            }
+          }
+        } else if (graphSearch[i] === '~') {
+          if (i + 1 < graphSearch.length) {
+            searchPattern += `[^${escapeRegex(graphSearch[i + 1])}]`;
+            i += 2;
+          } else {
+            searchPattern += '\\~';
+            i++;
+          }
+        } else if (graphSearch[i] === '*') {
+          searchPattern += '.*';
           i++;
-        }
-      } else if (graphSearch[i] === '*') {
-        searchPattern += '.*';
-        i++;
-      } else {
-        // Экранируем спецсимволы regex, кроме |, ^, $ (для поддержки OR и якорей из Natural Query)
-        const char = graphSearch[i];
-        if (/[.+?{}()|[\]\\]/.test(char)) {
+        } else {
+          const char = graphSearch[i];
           if (char === '^' || char === '$' || char === '|') {
             searchPattern += char;
           } else {
-            searchPattern += '\\' + char;
+            searchPattern += escapeRegex(char);
           }
-        } else {
-          searchPattern += char;
+          i++;
         }
-        i++;
+      }
+
+      try {
+        const regexMatch = graphSearch.match(/^\/(.+)\/([gimsuy]*)$/);
+        if (regexMatch) {
+          graphRegex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
+        } else {
+          graphRegex = new RegExp(searchPattern, 'i');
+        }
+      } catch {
+        graphRegex = new RegExp(searchPattern, 'i');
       }
     }
 
-    // Обработка явного /regex/
-    const regexMatch = graphSearch.match(/^\/(.+)\/([gimsuy]*)$/);
-    let regex: RegExp;
-    try {
-      if (regexMatch) {
-        regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
-      } else {
-        regex = new RegExp(searchPattern, 'i');
+    // 2. Подготавливаем регулярку для фильтра из ИНСПЕКТОРА
+    let inspectorRegex: RegExp | null = null;
+    if (inspectorSearch.trim()) {
+      const trimmedSearch = inspectorSearch.trim();
+      const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
+      try {
+        if (regexMatch) {
+          inspectorRegex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
+        } else {
+          inspectorRegex = new RegExp(trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        }
+      } catch (e) {
+        console.warn('[KnowledgeGraph] Invalid inspector search regex', e);
       }
-    } catch {
-      regex = new RegExp(searchPattern, 'i');
     }
 
-    // Находим всех соседей сфокусированных узлов, чтобы они не скрывались фильтром
+    // 3. Определяем узлы, которые должны быть ВСЕГДА (фокус)
     const alwaysShowIds = new Set<string>(focusedNodeIds);
-    if (focusedNodeIds.size > 0 && graphData) {
+    if (focusedNodeIds.size > 0) {
       graphData.links.forEach(link => {
         const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
         const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
@@ -393,20 +349,38 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       });
     }
 
-    const filteredNodes = filteredGraphData.nodes.filter(node =>
-      alwaysShowIds.has(node.id) || regex.test(node.id)
-    );
+    // 4. ОСНОВНАЯ ФИЛЬТРАЦИЯ
+    const filteredNodes = graphData.nodes.filter(node => {
+      // Сфокусированные узлы и их соседи - всегда
+      if (alwaysShowIds.has(node.id)) return true;
+
+      // Если есть поиск в самом графе - он главный
+      if (graphRegex) {
+        return graphRegex.test(node.id);
+      }
+
+      // Если поиска в графе нет, но есть фильтр в Инспекторе
+      if (inspectorSearch.trim()) {
+        // Проверяем по ID (Set из Инспектора илиRegex)
+        return filteredItemIds.has(node.id) || (inspectorRegex && inspectorRegex.test(node.id));
+      }
+
+      // Если фильтров нет вообще - показываем всё
+      return true;
+    });
 
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-    const filteredLinks = filteredGraphData.links.filter(link =>
-      filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target)
-    );
+    const filteredLinks = graphData.links.filter(link => {
+      const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      return filteredNodeIds.has(s) && filteredNodeIds.has(t);
+    });
 
     return {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [filteredGraphData, graphSearch, focusedNodeIds, graphData]);
+  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch]);
 
   // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик)
   const focusFilteredGraphData = useMemo(() => {

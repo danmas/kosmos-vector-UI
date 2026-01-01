@@ -104,9 +104,38 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                 setScriptDetails(scriptRes.script);
             }
             setActiveTab('result');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Natural query error:', err);
-            setError(err instanceof Error ? err.message : 'Unknown error occurred');
+
+            // Если у нас есть расширенные данные об ошибке от ApiError
+            if (err.data && err.data.human) {
+                setError(err.data.human);
+
+                // Если в ошибке пришел скрипт, показываем его для отладки
+                if (err.data.script) {
+                    setScriptDetails({
+                        id: err.data.scriptId || 0,
+                        script: err.data.script,
+                        context_code: '',
+                        question: finalQuestion,
+                        usage_count: 0,
+                        is_valid: false,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    } as any);
+
+                    // Также создаем "фейковый" ответ, чтобы показать вкладки
+                    setResponse({
+                        success: false,
+                        human: err.data.human,
+                        raw: null,
+                        scriptId: err.data.scriptId,
+                        cached: err.data.cached || false
+                    } as any);
+                }
+            } else {
+                setError(err instanceof Error ? err.message : 'Unknown error occurred');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -153,44 +182,72 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     };
 
     const applyToSearch = () => {
+        console.log('[NaturalQueryDialog] applyToSearch called, response:', response);
         if (response?.raw) {
             let filterValue = '';
             if (Array.isArray(response.raw)) {
-                // Extract best identifier from each object
+                if (response.raw.length === 0) {
+                    console.warn('[NaturalQueryDialog] Raw result is an empty array, nothing to filter');
+                    return;
+                }
+
+                console.log('[NaturalQueryDialog] Processing array raw data, length:', response.raw.length);
+                // Извлекаем лучший идентификатор из каждого объекта
                 const items = response.raw.map((item: any) => {
                     if (typeof item === 'string') return item;
-                    // Priority list of keys that usually contain the name/id
+                    // Список приоритетных ключей для имен/id
                     const idKeys = ['function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
                     for (const key of idKeys) {
                         if (item[key]) return String(item[key]);
                     }
-                    // Fallback: use the first string value found in the object
+                    // Фоллбэк: берем первое строковое значение
                     const stringVal = Object.values(item).find(v => typeof v === 'string');
                     if (stringVal) return String(stringVal);
 
                     return JSON.stringify(item);
                 });
 
-                // Unique items only
-                const uniqueItems = Array.from(new Set(items));
-
-                // Join with anchors for exact matching and wrap in slashes for regex mode
-                const regexContent = uniqueItems.map(item => `^${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).join('|');
-                filterValue = `/${regexContent}/i`;
-
-                // Limit length to avoid breaking UI (approx 500 chars)
-                if (filterValue.length > 500) {
-                    const truncatedRegex = uniqueItems.slice(0, 5).map(item => `^${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).join('|');
-                    filterValue = `/${truncatedRegex}/i`;
+                const uniqueItems = Array.from(new Set(items)).filter(Boolean);
+                if (uniqueItems.length === 0) {
+                    console.warn('[NaturalQueryDialog] No identifiers found in results');
+                    return;
                 }
+
+                console.log('[NaturalQueryDialog] Unique items for regex:', uniqueItems);
+
+                // Собираем регулярку, пока она влезает в разумный предел (например, 2000 символов)
+                const MAX_REGEX_LENGTH = 2000;
+                let includedItems: string[] = [];
+                let currentLength = 10; // Длина обертки /^(?:)$/i
+
+                for (const item of uniqueItems) {
+                    const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // Проверяем, влезет ли элемент (+1 для разделителя |)
+                    if (currentLength + escaped.length + 1 < MAX_REGEX_LENGTH) {
+                        includedItems.push(escaped);
+                        currentLength += escaped.length + 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (includedItems.length < uniqueItems.length) {
+                    console.warn(`[NaturalQueryDialog] Truncated regex to ${includedItems.length} items out of ${uniqueItems.length} due to length limits (${MAX_REGEX_LENGTH} chars)`);
+                }
+
+                // Создаем регулярку для точного совпадения через группу
+                filterValue = `/^(?:${includedItems.join('|')})$/i`;
             } else if (typeof response.raw === 'string') {
                 filterValue = response.raw;
             } else {
                 filterValue = JSON.stringify(response.raw);
             }
 
+            console.log('[NaturalQueryDialog] Applying filter value:', filterValue);
             onApplyResult(filterValue);
             onClose();
+        } else {
+            console.log('[NaturalQueryDialog] No raw data to apply');
         }
     };
 
@@ -466,6 +523,28 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 )}
                             </div>
                         </>
+                    ) : error ? (
+                        <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center">
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 w-full max-w-sm">
+                                <div className="flex items-center gap-2 mb-2 text-red-400">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="font-bold text-sm">Ошибка запроса</span>
+                                </div>
+                                <p className="text-xs text-red-200/80 leading-relaxed mb-4">
+                                    {error}
+                                </p>
+                                {scriptDetails && (
+                                    <button
+                                        onClick={() => setActiveTab('script')}
+                                        className="text-[10px] text-blue-400 hover:text-blue-300 underline font-bold"
+                                    >
+                                        Посмотреть код скрипта для отладки
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-500 bg-slate-900/20">
                             <div className="bg-slate-800/40 p-4 rounded-full mb-3 border border-slate-700/30">

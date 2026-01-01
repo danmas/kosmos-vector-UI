@@ -38,7 +38,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status?: number,
-    public code?: string
+    public code?: string,
+    public data?: any
   ) {
     super(message);
     this.name = 'ApiError';
@@ -222,7 +223,8 @@ export class ApiClient {
         throw new ApiError(
           (responseData && typeof responseData === 'object' && responseData.error) || `HTTP ${response.status}: ${response.statusText}`,
           response.status,
-          'HTTP_ERROR'
+          'HTTP_ERROR',
+          responseData
         );
       }
 

@@ -212,7 +212,16 @@ export interface NaturalQueryResponse {
   success: boolean;
   human: string;
   raw: any;
-  scriptId: number;
+  scriptId: number | null;
+  cached: boolean;
+}
+
+export interface NaturalQueryErrorResponse {
+  success: false;
+  error: string;
+  human: string;
+  scriptId: number | null;
+  script: string | null;
   cached: boolean;
 }
 

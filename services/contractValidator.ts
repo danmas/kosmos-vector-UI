@@ -44,6 +44,15 @@ export function validateApiResponse(
       validation.errors.push('Error responses must have error message string');
       validation.valid = false;
     }
+
+    // Дополнительные поля для NaturalQueryErrorResponse (опционально для валидатора)
+    // Мы не требуем их наличия во всех ошибках, но позволяем им быть там
+    const allowedErrorFields = ['success', 'error', 'human', 'scriptId', 'script', 'cached'];
+    const extraFields = Object.keys(responseData).filter(f => !allowedErrorFields.includes(f));
+    if (extraFields.length > 0 && normalizedPath === '/api/v1/natural-query') {
+      // Для Natural Query мы позволяем эти поля, но если есть другие - предупреждаем
+      // (На данный момент просто пропускаем, так как валидатор не должен быть слишком строгим к расширениям)
+    }
   }
 
   // 2. Проверяем специфичные структуры для успешных ответов (2xx)
@@ -470,7 +479,7 @@ function validateProjectSelectionResponse(data: any, statusCode: number): Valida
           validation.valid = false;
         } else {
           // Проверяем что все пути начинаются с ./
-          const invalidPaths = config.fileSelection.filter((path: any) => 
+          const invalidPaths = config.fileSelection.filter((path: any) =>
             typeof path !== 'string' || !path.startsWith('./')
           );
           if (invalidPaths.length > 0) {

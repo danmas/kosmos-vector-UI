@@ -33,7 +33,21 @@ const getAbsoluteTime = () => {
 };
 
 const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
-  const { filteredItemIds, setFilteredItemIds } = useGraphFilter();
+  const { filteredItemIds, setFilteredItemIds, graphSearch, setGraphSearch, filterHistory, clearHistory } = useGraphFilter();
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  // Закрытие истории при клике вне
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const { getGraph, setGraph, currentContextCode } = useDataCache();
   const svgRef = useRef<SVGSVGElement>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -41,7 +55,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [dataSource, setDataSource] = useState<'cache' | 'server' | null>(null);
-  const [search, setSearch] = useState('');
   const [focusedNodeIds, setFocusedNodeIds] = useState<Set<string>>(new Set());
   const [clickHistory, setClickHistory] = useState<string[]>([]);
   const [sessionClickHistory, setSessionClickHistory] = useState<string[]>([]);
@@ -244,7 +257,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
   // Дополнительная фильтрация по поисковому запросу
   const finalFilteredGraphData = useMemo(() => {
-    if (!filteredGraphData || !search.trim()) {
+    if (!filteredGraphData || !graphSearch.trim()) {
       return filteredGraphData;
     }
 
@@ -288,58 +301,48 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     let searchPattern = '';
     let i = 0;
 
-    while (i < search.length) {
-      if (search[i] === '~' && i + 1 < search.length && search[i + 1] === '[') {
-        // Обрабатываем ~[...]
+    while (i < graphSearch.length) {
+      if (graphSearch[i] === '~' && i + 1 < graphSearch.length && graphSearch[i + 1] === '[') {
         const excludeStart = i;
-        i += 2; // Пропускаем ~[
+        i += 2;
         let sequence = '';
-        while (i < search.length && search[i] !== ']') {
-          if (search[i] === '\\' && i + 1 < search.length) {
-            sequence += search[i] + search[i + 1];
+        while (i < graphSearch.length && graphSearch[i] !== ']') {
+          if (graphSearch[i] === '\\' && i + 1 < graphSearch.length) {
+            sequence += graphSearch[i] + graphSearch[i + 1];
             i += 2;
-          } else if (search[i] !== ']') {
-            sequence += search[i];
+          } else if (graphSearch[i] !== ']') {
+            sequence += graphSearch[i];
             i++;
           } else {
             break;
           }
         }
-        if (i < search.length && search[i] === ']') {
-          i++; // Пропускаем ]
+        if (i < graphSearch.length && graphSearch[i] === ']') {
+          i++;
           const escapedSeq = escapeRegex(sequence);
-
-          // Собираем текст до ~[...]
-          const textBefore = search.slice(0, excludeStart);
-          // Собираем текст после ~[...]
-          const textAfter = search.slice(i);
+          const textBefore = graphSearch.slice(0, excludeStart);
+          const textAfter = graphSearch.slice(i);
 
           if (textBefore.length > 0 && textAfter.length > 0) {
-            // text~[seq]text - комбинированный случай
             const processedBefore = processText(textBefore);
             const processedAfter = processText(textAfter);
             searchPattern += `${processedBefore}(?!${escapedSeq})${processedAfter}`;
-            i = search.length; // Обработали все
+            i = graphSearch.length;
           } else if (textBefore.length > 0) {
-            // text~[seq] - negative lookahead: после text не должна идти seq
             const processedBefore = processText(textBefore);
             searchPattern += `${processedBefore}(?!${escapedSeq}).*`;
-            i = search.length; // Обработали все
+            i = graphSearch.length;
           } else if (textAfter.length > 0) {
-            // ~[seq]text - negative lookbehind: text не должен идти после seq
             const processedAfter = processText(textAfter);
             searchPattern += `(?<!${escapedSeq})${processedAfter}`;
-            i = search.length; // Обработали все
+            i = graphSearch.length;
           } else {
-            // ~[seq] - просто проверяем отсутствие seq
             searchPattern += `(?!.*${escapedSeq})`;
           }
         }
-      } else if (search[i] === '~') {
-        // Обрабатываем ~X (один символ)
-        if (i + 1 < search.length) {
-          const char = search[i + 1];
-          // Экранируем спецсимволы regex
+      } else if (graphSearch[i] === '~') {
+        if (i + 1 < graphSearch.length) {
+          const char = graphSearch[i + 1];
           const escapedChar = char.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
           searchPattern += `[^${escapedChar}]`;
           i += 2;
@@ -347,15 +350,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           searchPattern += '\\~';
           i++;
         }
-      } else if (search[i] === '*') {
+      } else if (graphSearch[i] === '*') {
         searchPattern += '.*';
         i++;
       } else {
-        // Обычный символ - экранируем спецсимволы regex, кроме |, ^, $ (для поддержки OR и якорей)
-        const char = search[i];
+        // Экранируем спецсимволы regex, кроме |, ^, $ (для поддержки OR и якорей из Natural Query)
+        const char = graphSearch[i];
         if (/[.+?{}()|[\]\\]/.test(char)) {
-          // Исключаем ^ и $ из автоматического экранирования в этом блоке, 
-          // так как они часто нужны как якоря при передаче списка ID
           if (char === '^' || char === '$' || char === '|') {
             searchPattern += char;
           } else {
@@ -368,23 +369,32 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       }
     }
 
-    // Проверяем, является ли это уже явным регулярным выражением (начинается и заканчивается на /)
-    const regexMatch = search.match(/^\/(.+)\/([gimsuy]*)$/);
+    // Обработка явного /regex/
+    const regexMatch = graphSearch.match(/^\/(.+)\/([gimsuy]*)$/);
     let regex: RegExp;
-
-    if (regexMatch) {
-      try {
+    try {
+      if (regexMatch) {
         regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
-      } catch (e) {
-        console.error('Invalid regex in search:', e);
+      } else {
         regex = new RegExp(searchPattern, 'i');
       }
-    } else {
+    } catch {
       regex = new RegExp(searchPattern, 'i');
     }
 
+    // Находим всех соседей сфокусированных узлов, чтобы они не скрывались фильтром
+    const alwaysShowIds = new Set<string>(focusedNodeIds);
+    if (focusedNodeIds.size > 0 && graphData) {
+      graphData.links.forEach(link => {
+        const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
+        const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
+        if (focusedNodeIds.has(s)) alwaysShowIds.add(t);
+        if (focusedNodeIds.has(t)) alwaysShowIds.add(s);
+      });
+    }
+
     const filteredNodes = filteredGraphData.nodes.filter(node =>
-      regex.test(node.id)
+      alwaysShowIds.has(node.id) || regex.test(node.id)
     );
 
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
@@ -396,7 +406,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [filteredGraphData, search]);
+  }, [filteredGraphData, graphSearch, focusedNodeIds, graphData]);
 
   // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик)
   const focusFilteredGraphData = useMemo(() => {
@@ -804,13 +814,52 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               Cached
             </span>
           )}
-          <input
-            type="text"
-            placeholder="Search by ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-xs text-white focus:border-blue-500 outline-none w-36"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Filter graph... (e.g. ^carl_.*|auth_.*)"
+              value={graphSearch}
+              onChange={(e) => setGraphSearch(e.target.value)}
+              onFocus={() => setShowHistory(true)}
+              className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white focus:border-blue-500 outline-none w-64 shadow-inner pr-8"
+            />
+            {filterHistory.length > 0 && (
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="absolute right-2 top-1.5 text-slate-500 hover:text-white"
+              >
+                <svg className={`w-3.5 h-3.5 transition-transform ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+
+            {/* Выпадающий список истории */}
+            {showHistory && filterHistory.length > 0 && (
+              <div
+                ref={historyRef}
+                className="absolute top-full right-0 mt-1 w-80 bg-slate-800 border border-slate-700 rounded shadow-2xl z-[150] max-h-60 overflow-y-auto"
+              >
+                <div className="px-2 py-1 border-b border-slate-700 flex justify-between items-center bg-slate-800/80">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recent Filters</span>
+                  <button onClick={clearHistory} className="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                </div>
+                {filterHistory.map((h, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setGraphSearch(h);
+                      setShowHistory(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white border-b border-slate-700/50 last:border-0 truncate font-mono"
+                    title={h}
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => setIsQueryDialogOpen(true)}
             className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shadow-blue-900/20"
@@ -988,7 +1037,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       <NaturalQueryDialog
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
-        onApplyResult={(res) => setSearch(res)}
+        onApplyResult={(res) => setGraphSearch(res)}
       />
     </div>
   );

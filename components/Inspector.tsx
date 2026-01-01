@@ -11,7 +11,20 @@ interface InspectorProps {
 }
 
 const Inspector: React.FC<InspectorProps> = () => {
-  const { setFilteredItemIds } = useGraphFilter();
+  const { setFilteredItemIds, inspectorSearch, setInspectorSearch, filterHistory, clearHistory } = useGraphFilter();
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  // Закрытие истории при клике вне
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const { getItemsList, setItemsList: setCachedItemsList, currentContextCode } = useDataCache();
   const [itemsList, setItemsList] = useState<AiItemSummary[]>([]);
   const [fullItemData, setFullItemData] = useState<AiItem | null>(null);
@@ -20,13 +33,17 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'L0' | 'L1' | 'L2'>('L1');
   const [dataSource, setDataSource] = useState<'cache' | 'server' | null>(null);
   const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
 
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
+
+  // Отладка изменения поиска
+  useEffect(() => {
+    console.log('[Inspector] inspectorSearch changed to:', inspectorSearch);
+  }, [inspectorSearch]);
 
   // Загрузка списка метаданных: сначала из кэша, затем с сервера
   useEffect(() => {
@@ -111,7 +128,7 @@ const Inspector: React.FC<InspectorProps> = () => {
   // Мемоизируем filteredItems чтобы избежать пересоздания на каждый рендер
   // Поддержка regex: если поиск обёрнут в /.../ — используется регулярное выражение
   const filteredItems = useMemo(() => {
-    const trimmedSearch = search.trim();
+    const trimmedSearch = inspectorSearch.trim();
 
     // Проверяем, является ли это regex-паттерном: /pattern/ или /pattern/flags
     const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
@@ -134,7 +151,7 @@ const Inspector: React.FC<InspectorProps> = () => {
       item.id.toLowerCase().includes(searchLower) ||
       item.filePath.toLowerCase().includes(searchLower)
     );
-  }, [itemsList, search]);
+  }, [itemsList, inspectorSearch]);
 
   // Публикация отфильтрованных ID в контекст для синхронизации с графом
   // Обновляем только при реальном изменении списка ID
@@ -230,16 +247,55 @@ const Inspector: React.FC<InspectorProps> = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Search ID or File... (/regex/)"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                placeholder="Search ID or File... (/regex/)"
+                value={inspectorSearch}
+                onChange={(e) => setInspectorSearch(e.target.value)}
+                onFocus={() => setShowHistory(true)}
+                className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white focus:border-blue-500 outline-none pr-8"
+              />
+              {filterHistory.length > 0 && (
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="absolute right-2 top-2 text-slate-500 hover:text-white"
+                >
+                  <svg className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Выпадающий список истории */}
+              {showHistory && filterHistory.length > 0 && (
+                <div
+                  ref={historyRef}
+                  className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-2xl z-50 max-h-60 overflow-y-auto"
+                >
+                  <div className="px-2 py-1 border-b border-slate-700 flex justify-between items-center bg-slate-800/80">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recent Filters</span>
+                    <button onClick={clearHistory} className="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                  </div>
+                  {filterHistory.map((h, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setInspectorSearch(h);
+                        setShowHistory(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white border-b border-slate-700/50 last:border-0 truncate font-mono"
+                      title={h}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setIsQueryDialogOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded transition-colors flex items-center gap-1 shadow-lg"
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
               title="Natural Language Query"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,8 +363,8 @@ const Inspector: React.FC<InspectorProps> = () => {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 text-xs font-bold transition-colors ${activeTab === tab
-                      ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'text-blue-400 border-b-2 border-blue-400 bg-blue-900/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                     }`}
                 >
                   {tab === 'L0' ? 'L0: Source Code' : tab === 'L1' ? 'L1: Connectivity' : 'L2: Semantics'}
@@ -336,7 +392,7 @@ const Inspector: React.FC<InspectorProps> = () => {
       <NaturalQueryDialog
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
-        onApplyResult={(res) => setSearch(res)}
+        onApplyResult={(res) => setInspectorSearch(res)}
       />
     </div>
   );

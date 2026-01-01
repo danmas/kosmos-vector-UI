@@ -73,10 +73,15 @@ export class ApiClient {
     // Формируем URL с context-code
     // Проверяем, есть ли уже query параметры в endpoint
     const hasQuery = endpoint.includes('?');
+    // Проверяем, не добавлен ли уже context-code в endpoint
+    const hasContextCode = endpoint.includes('context-code=');
     const separator = hasQuery ? '&' : '?';
     // Используем полный URL для логирования (с хостом и портом)
     const baseForUrl = this.baseUrl || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
-    const url = `${baseForUrl}${endpoint}${separator}context-code=${encodeURIComponent(contextCode)}`;
+    // Добавляем context-code только если его еще нет в endpoint
+    const url = hasContextCode 
+      ? `${baseForUrl}${endpoint}`
+      : `${baseForUrl}${endpoint}${separator}context-code=${encodeURIComponent(contextCode)}`;
     const method = options.method || 'GET';
 
     // Логирование запроса
@@ -550,6 +555,15 @@ export class ApiClient {
   async deleteAgentScript(id: number): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(`/api/agent-scripts/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  /**
+   * POST /api/agent-scripts/{id}/execute - выполнение существующего скрипта
+   */
+  async executeAgentScript(id: number): Promise<import('../types').NaturalQueryResponse> {
+    return this.request<import('../types').NaturalQueryResponse>(`/api/agent-scripts/${id}/execute`, {
+      method: 'POST',
     });
   }
 }

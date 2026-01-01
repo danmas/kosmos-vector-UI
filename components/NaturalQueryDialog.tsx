@@ -21,6 +21,11 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [filteredSuggestions, setFilteredSuggestions] = useState<AgentScript[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(-1);
+    const [isEditingScript, setIsEditingScript] = useState(false);
+    const [editedScriptCode, setEditedScriptCode] = useState('');
+    const [isSavingScript, setIsSavingScript] = useState(false);
+    const [isExecutingScript, setIsExecutingScript] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
     // Position and Size state
     const [position, setPosition] = useState({ x: window.innerWidth - 530, y: 64 });
@@ -95,6 +100,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         setShowSuggestions(false);
         setIsLoading(true);
         setError(null);
+        setIsEditingScript(false);
         try {
             const res = await apiClient.naturalQuery(finalQuestion);
             setResponse(res);
@@ -146,6 +152,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         setQuestion(suggestion.question);
         setIsLoading(true);
         setError(null);
+        setIsEditingScript(false);
 
         try {
             // Загружаем полные данные скрипта, включая возможный last_result
@@ -298,6 +305,68 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const copyScript = () => {
         if (scriptDetails?.script) {
             navigator.clipboard.writeText(scriptDetails.script);
+        }
+    };
+
+    const handleSaveScript = async (runAfterSave = false) => {
+        if (!scriptDetails || !editedScriptCode.trim()) return;
+
+        setIsSavingScript(true);
+        setSaveSuccess(false);
+        try {
+            const res = await apiClient.updateAgentScript(scriptDetails.id, {
+                script: editedScriptCode
+            });
+            if (res.success) {
+                setScriptDetails(res.script);
+                setIsEditingScript(false);
+                setSaveSuccess(true);
+                setTimeout(() => setSaveSuccess(false), 3000);
+
+                if (runAfterSave) {
+                    await handleRunScript();
+                }
+            }
+        } catch (err: any) {
+            console.error('Failed to save script:', err);
+            setError(`Failed to save script: ${err.message}`);
+        } finally {
+            setIsSavingScript(false);
+        }
+    };
+
+    const handleRunScript = async () => {
+        if (!scriptDetails) return;
+
+        setIsExecutingScript(true);
+        setError(null);
+        try {
+            const res = await apiClient.executeAgentScript(scriptDetails.id);
+            setResponse(res);
+            setActiveTab('result');
+        } catch (err: any) {
+            console.error('Failed to execute script:', err);
+            setError(`Execution failed: ${err.message}`);
+            // Если ошибка содержит детали скрипта (NaturalQueryErrorResponse)
+            if (err.data) {
+                setResponse({
+                    success: false,
+                    human: err.data.human || err.message,
+                    raw: err.data.last_result?.raw || null,
+                    scriptId: err.data.scriptId || scriptDetails.id,
+                    cached: false,
+                    last_result: err.data.last_result || null
+                });
+            }
+        } finally {
+            setIsExecutingScript(false);
+        }
+    };
+
+    const startEditing = () => {
+        if (scriptDetails) {
+            setEditedScriptCode(scriptDetails.script);
+            setIsEditingScript(true);
         }
     };
 
@@ -543,20 +612,100 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[9px] font-mono text-slate-500">ID: {scriptDetails.id}</span>
                                                         <span className="text-[8px] bg-blue-500/10 text-blue-400 px-1 py-0.5 rounded border border-blue-500/20 font-bold">JS</span>
+                                                        {saveSuccess && (
+                                                            <span className="text-[8px] text-green-400 font-bold animate-pulse">✓ Saved</span>
+                                                        )}
                                                     </div>
-                                                    <button
-                                                        onClick={copyScript}
-                                                        className="text-[9px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-700/50 px-1.5 py-0.5 rounded transition-colors border border-slate-600"
-                                                    >
-                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                                        </svg>
-                                                        Copy
-                                                    </button>
+                                                    <div className="flex items-center gap-2">
+                                                        {!isEditingScript ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={handleRunScript}
+                                                                    disabled={isExecutingScript}
+                                                                    className="text-[9px] text-green-400 hover:text-white flex items-center gap-1 bg-green-500/10 hover:bg-green-500/20 px-1.5 py-0.5 rounded transition-colors border border-green-500/30 disabled:opacity-50"
+                                                                >
+                                                                    {isExecutingScript ? (
+                                                                        <div className="animate-spin rounded-full h-2 w-2 border-b border-green-400"></div>
+                                                                    ) : (
+                                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                        </svg>
+                                                                    )}
+                                                                    Run
+                                                                </button>
+                                                                <button
+                                                                    onClick={startEditing}
+                                                                    className="text-[9px] text-blue-400 hover:text-white flex items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition-colors border border-blue-500/30"
+                                                                >
+                                                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M15.586 15.586a2 2 0 112.828 2.828l-6.414 6.414-2.828.707.707-2.828 6.414-6.414zm.707-3.536L12.757 14.8l-1.414-1.414 3.536-3.536 1.414 1.414zm-4.242 4.242l-1.414-1.414 3.536-3.536 1.414 1.414-3.536 3.536z" />
+                                                                    </svg>
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={copyScript}
+                                                                    className="text-[9px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-700/50 px-1.5 py-0.5 rounded transition-colors border border-slate-600"
+                                                                >
+                                                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                                    </svg>
+                                                                    Copy
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleSaveScript(true)}
+                                                                    disabled={isSavingScript || isExecutingScript}
+                                                                    className="text-[9px] text-blue-400 hover:text-white flex items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition-colors border border-blue-500/30 disabled:opacity-50"
+                                                                >
+                                                                    {(isSavingScript || isExecutingScript) ? (
+                                                                        <div className="animate-spin rounded-full h-2 w-2 border-b border-blue-400"></div>
+                                                                    ) : (
+                                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                                        </svg>
+                                                                    )}
+                                                                    Save & Run
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleSaveScript(false)}
+                                                                    disabled={isSavingScript || isExecutingScript}
+                                                                    className="text-[9px] text-green-400 hover:text-white flex items-center gap-1 bg-green-500/10 hover:bg-green-500/20 px-1.5 py-0.5 rounded transition-colors border border-green-500/30 disabled:opacity-50"
+                                                                >
+                                                                    {isSavingScript ? (
+                                                                        <div className="animate-spin rounded-full h-2 w-2 border-b border-green-400"></div>
+                                                                    ) : (
+                                                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                    )}
+                                                                    Save
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setIsEditingScript(false)}
+                                                                    disabled={isSavingScript}
+                                                                    className="text-[9px] text-red-400 hover:text-white flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 px-1.5 py-0.5 rounded transition-colors border border-red-500/30 disabled:opacity-50"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed selection:bg-blue-500/30 whitespace-pre-wrap break-all">
-                                                    <code>{renderHighlightedCode(scriptDetails.script)}</code>
-                                                </pre>
+                                                {isEditingScript ? (
+                                                    <textarea
+                                                        value={editedScriptCode}
+                                                        onChange={(e) => setEditedScriptCode(e.target.value)}
+                                                        className="flex-1 bg-slate-950 p-3 text-[10px] font-mono leading-relaxed text-blue-300 outline-none resize-none scrollbar-thin scrollbar-thumb-slate-700"
+                                                        spellCheck={false}
+                                                    />
+                                                ) : (
+                                                    <pre className="flex-1 overflow-auto p-3 text-[10px] font-mono leading-relaxed selection:bg-blue-500/30 whitespace-pre-wrap break-all">
+                                                        <code>{renderHighlightedCode(scriptDetails.script)}</code>
+                                                    </pre>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="flex items-center justify-center h-full text-slate-500 text-[10px]">

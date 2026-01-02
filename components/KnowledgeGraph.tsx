@@ -382,43 +382,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     };
   }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch]);
 
-  // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик)
-  const focusFilteredGraphData = useMemo(() => {
-    if (!finalFilteredGraphData || focusedNodeIds.size === 0) {
-      return finalFilteredGraphData;
-    }
-
-    // Находим все связи, где любой из focusedNodeIds является source или target
-    const relatedLinks = finalFilteredGraphData.links.filter(link =>
-      focusedNodeIds.has(link.source) || focusedNodeIds.has(link.target)
-    );
-
-    // Собираем ID всех связанных узлов
-    const relatedNodeIds = new Set<string>(focusedNodeIds);
-    relatedLinks.forEach(link => {
-      relatedNodeIds.add(link.source);
-      relatedNodeIds.add(link.target);
-    });
-
-    // Фильтруем узлы
-    const filteredNodes = finalFilteredGraphData.nodes.filter(node =>
-      relatedNodeIds.has(node.id)
-    );
-
-    return {
-      nodes: filteredNodes,
-      links: relatedLinks
-    };
-  }, [finalFilteredGraphData, focusedNodeIds]);
+  // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик) - ТЕПЕРЬ ОТКЛЮЧЕНА, 
+  // так как мы хотим аддитивное поведение в finalFilteredGraphData
+  const displayGraphData = finalFilteredGraphData;
 
   useEffect(() => {
     const renderStart = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect отрисовки ЗАПУЩЕН`, {
-      nodes: focusFilteredGraphData?.nodes.length,
-      links: focusFilteredGraphData?.links.length
+      nodes: displayGraphData?.nodes.length,
+      links: displayGraphData?.links.length
     });
 
-    if (!svgRef.current || !focusFilteredGraphData || focusFilteredGraphData.nodes.length === 0) {
+    if (!svgRef.current || !displayGraphData || displayGraphData.nodes.length === 0) {
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect: ранний выход`);
       return;
     }
@@ -433,8 +408,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .attr("viewBox", [0, 0, width, height]);
 
     // Use the filtered graph data
-    const nodes = focusFilteredGraphData.nodes.map(d => ({ ...d }));
-    const links = focusFilteredGraphData.links.map(d => ({ ...d }));
+    const nodes = displayGraphData.nodes.map(d => ({ ...d }));
+    const links = displayGraphData.links.map(d => ({ ...d }));
 
     // Add invisible background rect for panning (catches mouse events on empty space)
     // Must be first so it's under everything but still receives events on empty space
@@ -459,8 +434,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .attr("viewBox", "0 -5 10 10")
       .attr("refX", 25)
       .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
+      .attr("markerWidth", 8)           // средний размер, как просил
+      .attr("markerHeight", 8)
       .attr("orient", "auto")
       .append("path")
       .attr("d", "M0,-5L10,0L0,5")
@@ -532,6 +507,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .on("click", (event: any, d: any) => {
         addToClickHistory(d.id);
         addToSessionHistory(d.id);
+
+        // Alt+клик — оставляем ТОЛЬКО этот узел и его связи (сброс остального фильтра)
+        if (event.altKey) {
+          event.stopPropagation();
+          const relatedNodes = findRelatedNodes(d.id);
+
+          setGraphSearch(''); // Сбрасываем поиск графа
+          setFilteredItemIds(relatedNodes); // В инспекторе и на графе — только эти
+          setFocusedNodeIds(new Set([d.id])); // В фокусе только он один
+          return;
+        }
+
         // Ctrl+клик — добавляем все связанные узлы к фильтру (из полного графа, без учета текущего фильтра)
         if (event.ctrlKey || event.metaKey) {
           event.stopPropagation();
@@ -550,9 +537,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
           // Также добавляем к фокусу для подсветки
           const newFocusSet = new Set(focusedNodeIds);
-          for (const id of relatedNodes) {
-            newFocusSet.add(id);
-          }
+          newFocusSet.add(d.id);
           setFocusedNodeIds(newFocusSet);
         }
       });
@@ -740,7 +725,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Cleanup: остановка симуляции`);
       simulation.stop();
     };
-  }, [focusFilteredGraphData, clickHistory]);
+  }, [displayGraphData, clickHistory]);
 
   if (isLoading) {
     return (

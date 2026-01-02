@@ -47,6 +47,10 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Загрузка списка метаданных: сначала из кэша, затем с сервера
   useEffect(() => {
+    // Очищаем выбранный элемент при смене контекста
+    setSelectedId(null);
+    setFullItemData(null);
+    
     const loadItemsList = async () => {
       console.log(`[Inspector] loadItemsList запущен для контекста: ${currentContextCode}`);
 
@@ -63,7 +67,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         setDataSource('cache');
         setIsLoading(false);
         // Set first item as selected by default
-        if (cached.data.length > 0 && !selectedId) {
+        if (cached.data.length > 0) {
           setSelectedId(cached.data[0].id);
         }
         return;

@@ -11,7 +11,7 @@ import ServerLogsDialog from './components/ServerLogsDialog';
 import { AppView, FileNode, ProjectFile } from './types';
 import { MOCK_FILE_TREE } from './constants';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from './services/apiClient';
-import { GraphFilterProvider } from './lib/context/GraphFilterContext';
+import { GraphFilterProvider, useGraphFilter } from './lib/context/GraphFilterContext';
 import { DataCacheProvider, useDataCache } from './lib/context/DataCacheContext';
 
 // Глобальная переменная для context_code
@@ -47,6 +47,9 @@ const AppContent: React.FC = () => {
     isPrefetching 
   } = useDataCache();
   
+  // Доступ к фильтрам для очистки при смене контекста
+  const { clearFilters } = useGraphFilter();
+  
   // Обёртка для setContextCode с синхронным обновлением глобальной переменной
   const setContextCode = (code: string) => {
     // Синхронно обновляем window.g_context_code, чтобы API запросы использовали правильный контекст
@@ -64,12 +67,14 @@ const AppContent: React.FC = () => {
   // Обновление глобальной переменной и запуск фоновой загрузки при изменении контекста
   useEffect(() => {
     window.g_context_code = contextCode;
+    // Очищаем все фильтры при смене контекста
+    clearFilters();
     // Запускаем фоновую предзагрузку данных
     console.log(`[App] Context changed to: ${contextCode}, starting prefetch...`);
     prefetchAll(contextCode);
     // Переключаемся на Dashboard для нового контекста
     setCurrentView(AppView.DASHBOARD);
-  }, [contextCode, prefetchAll]);
+  }, [contextCode, prefetchAll, clearFilters]);
 
   // Конвертация ProjectFile[] в FileNode[]
   const convertProjectFilesToFileNodes = (projectFiles: ProjectFile[]): FileNode[] => {

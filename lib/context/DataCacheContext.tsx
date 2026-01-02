@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode, useEffect } from 'react';
 import { AiItemSummary } from '../../types';
-import { GraphData, getGraphWithFallback, getItemsListWithFallback } from '../../services/apiClient';
+import { GraphData, getGraphWithFallback, getItemsListWithFallback, apiClient } from '../../services/apiClient';
 
 // Типы для кэша
 export interface CacheEntry<T> {
@@ -59,12 +59,36 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
 }) => {
   const [cache, setCache] = useState<DataCacheState>({});
   const [currentContextCode, setCurrentContextCode] = useState(initialContextCode);
-  const [availableContextCodes, setAvailableContextCodes] = useState<string[]>(['CARL', 'TEST']);
+  const [availableContextCodes, setAvailableContextCodes] = useState<string[]>([initialContextCode]);
   const [isPrefetching, setIsPrefetching] = useState(false);
   const [prefetchProgress, setPrefetchProgress] = useState({ loaded: 0, total: 2 });
   
   // Ref для отслеживания активных запросов (чтобы избежать дублирования)
   const activeRequests = useRef<Set<string>>(new Set());
+
+  // Загрузка списка доступных context codes с сервера
+  useEffect(() => {
+    const loadContextCodes = async () => {
+      try {
+        console.log('[DataCache] Loading available context codes from server...');
+        const response = await apiClient.getAvailableContexts();
+        if (response.success && response.contexts && response.contexts.length > 0) {
+          setAvailableContextCodes(response.contexts);
+          console.log('[DataCache] Loaded context codes:', response.contexts);
+          
+          // Если текущий context code не в списке, переключаемся на первый доступный
+          if (!response.contexts.includes(currentContextCode)) {
+            setCurrentContextCode(response.contexts[0]);
+            console.log(`[DataCache] Switched to first available context: ${response.contexts[0]}`);
+          }
+        }
+      } catch (error) {
+        console.warn('[DataCache] Failed to load context codes from server, using defaults:', error);
+      }
+    };
+    
+    loadContextCodes();
+  }, []);
 
   // Получить кэш для текущего контекста
   const getCurrentCache = useCallback((): ContextCache => {

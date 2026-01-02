@@ -474,6 +474,11 @@ export class ApiClient {
     });
   }
 
+  // GET /api/contexts - получить список доступных context codes
+  async getAvailableContexts(): Promise<{ success: boolean; contexts: string[] }> {
+    return this.request<{ success: boolean; contexts: string[] }>('/api/contexts');
+  }
+
   // Switch to demo mode
   setDemoMode(enabled: boolean) {
     this.isDemoMode = enabled;

@@ -1402,6 +1402,32 @@ app.post('/api/pipeline/context-config', (req, res) => {
   }
 });
 
+// GET /api/contexts - получить список доступных context codes
+app.get('/api/contexts', (req, res) => {
+  console.log('[Contexts API] GET /api/contexts - Retrieving available context codes');
+  
+  try {
+    // Получаем список context codes из pipelineConfigs
+    const contextCodes = Object.keys(pipelineConfigs);
+    
+    // Если список пустой, возвращаем дефолтный
+    if (contextCodes.length === 0) {
+      contextCodes.push('default');
+    }
+    
+    res.json({
+      success: true,
+      contexts: contextCodes
+    });
+  } catch (error) {
+    console.error('[Contexts API] Failed to get contexts:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // === SERVER-SENT EVENTS FOR PIPELINE PROGRESS ===
 
 // Store active SSE connections

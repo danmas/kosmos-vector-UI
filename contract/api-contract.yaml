@@ -2152,6 +2152,32 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PipelineContextConfig' }
 
+  /api/contexts:
+    get:
+      tags: [System]
+      summary: Получить список доступных context codes
+      description: |
+        Возвращает список всех доступных context codes из конфигураций pipeline.
+        Используется для построения списка выбора контекста в UI.
+      responses:
+        '200':
+          description: Список context codes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, contexts]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  contexts:
+                    type: array
+                    items:
+                      type: string
+                    example: ["CARL", "PROJECT_A", "TEST"]
+                    description: Список доступных context codes
+
   # ────────────────────────────────────── STREAMING
   /api/logs/stream:
     get:

@@ -102,6 +102,29 @@ const applyMaskToTree = (
   return selectedFiles;
 };
 
+// Вспомогательная функция для подсчёта выбранных файлов внутри папки
+const countSelectedInDirectory = (node: TreeNode, checkedFiles: Set<string>): { total: number; selected: number } => {
+  let total = 0;
+  let selected = 0;
+  
+  const countRecursive = (n: TreeNode) => {
+    if (!isDirectory(n)) {
+      total++;
+      if (checkedFiles.has(getNodeId(n))) {
+        selected++;
+      }
+    } else if (n.children) {
+      n.children.forEach(countRecursive);
+    }
+  };
+  
+  if (node.children) {
+    node.children.forEach(countRecursive);
+  }
+  
+  return { total, selected };
+};
+
 // Recursive component for the tree (universal for FileNode and ProjectFile)
 const FileTreeNode: React.FC<{ 
   node: TreeNode; 
@@ -122,11 +145,20 @@ const FileTreeNode: React.FC<{
   
   // Папки, попадающие в игнор, схлопнуты по умолчанию
   const [expanded, setExpanded] = useState(!isIgnored && !isBaseIgnored);
-  const isChecked = checkedFiles.has(nodeId);
+  
+  // Для файла - проверяем напрямую, для папки - вычисляем по содержимому
+  const { total: totalFiles, selected: selectedFiles } = isDir 
+    ? countSelectedInDirectory(node, checkedFiles) 
+    : { total: 1, selected: checkedFiles.has(nodeId) ? 1 : 0 };
+  
+  const isChecked = isDir ? selectedFiles > 0 && selectedFiles === totalFiles : checkedFiles.has(nodeId);
+  const isIndeterminate = isDir && selectedFiles > 0 && selectedFiles < totalFiles;
 
   const toggleExpand = () => setExpanded(!expanded);
   const toggleCheck = () => {
-    onToggleCheck(nodeId, !isChecked, isDirectory(node));
+    // Для папки: если есть выбранные файлы - снимаем все, если нет - выбираем все
+    const shouldCheck = isDir ? selectedFiles === 0 : !isChecked;
+    onToggleCheck(nodeId, shouldCheck, isDir);
   };
 
   const nodeSize = getNodeSize(node);
@@ -145,14 +177,20 @@ const FileTreeNode: React.FC<{
         <input 
           type="checkbox" 
           checked={isChecked} 
+          ref={(el) => { if (el) el.indeterminate = isIndeterminate; }}
           onChange={toggleCheck}
-          className="mr-1.5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-0 focus:ring-0 w-3.5 h-3.5"
+          className={`mr-1.5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-0 focus:ring-0 w-3.5 h-3.5 ${isIndeterminate ? 'opacity-70' : ''}`}
         />
         
-        <span className={`text-sm ${isDirectory(node) ? 'font-bold text-slate-300' : 'text-slate-400'} ${node.error ? 'text-red-400 line-through' : ''}`}>
+        <span className={`text-sm ${isDir ? 'font-bold text-slate-300' : 'text-slate-400'} ${node.error ? 'text-red-400 line-through' : ''}`}>
           {node.name}{sizeText} {node.error && `(${node.errorMessage || 'Access Denied'})`}
           {'language' in node && node.language && (
             <span className="ml-1 text-xs text-blue-400">[{node.language}]</span>
+          )}
+          {isDir && totalFiles > 0 && (
+            <span className={`ml-1.5 text-xs ${selectedFiles > 0 ? 'text-blue-400' : 'text-slate-500'}`}>
+              ({selectedFiles}/{totalFiles})
+            </span>
           )}
         </span>
       </div>
@@ -590,29 +628,45 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isSettingsDialogOpen]);
 
-  const handleToggleCheck = (filePath: string, checked: boolean, isDirectory: boolean) => {
+  const handleToggleCheck = (filePath: string, checked: boolean, isDirNode: boolean) => {
     const newCheckedFiles = new Set(checkedFiles);
     
-    if (isDirectory) {
-      // Если это папка, рекурсивно отмечаем/снимаем все файлы внутри
-      const toggleDirectoryFiles = (nodes: FileNode[], check: boolean) => {
+    // Парсим текущие паттерны для фильтрации
+    const includePatterns = mask.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    const ignorePatterns = ignore.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    
+    if (isDirNode) {
+      // Если это папка, рекурсивно отмечаем/снимаем все файлы внутри (с учётом масок)
+      const toggleDirectoryFiles = (nodes: TreeNode[], check: boolean) => {
         nodes.forEach(node => {
-          if (node.type === 'file') {
-            if (check) {
-              newCheckedFiles.add(node.id);
-            } else {
-              newCheckedFiles.delete(node.id);
+          const nodeId = getNodeId(node);
+          const isDir = isDirectory(node);
+          
+          if (!isDir) {
+            // Это файл - проверяем маски
+            const matchesInclude = matchesPattern(nodeId, includePatterns);
+            const matchesIgnore = ignorePatterns.length > 0 && matchesPattern(nodeId, ignorePatterns);
+            
+            // Выбираем только файлы, которые проходят фильтрацию
+            if (matchesInclude && !matchesIgnore) {
+              if (check) {
+                newCheckedFiles.add(nodeId);
+              } else {
+                newCheckedFiles.delete(nodeId);
+              }
             }
           } else if (node.children) {
+            // Это папка - рекурсивно обрабатываем
             toggleDirectoryFiles(node.children, check);
           }
         });
       };
       
       // Найдем папку и обработаем её содержимое
-      const findAndToggleDirectory = (nodes: FileNode[]) => {
+      const findAndToggleDirectory = (nodes: TreeNode[]): boolean => {
         for (const node of nodes) {
-          if (node.id === filePath && node.children) {
+          const nodeId = getNodeId(node);
+          if (nodeId === filePath && node.children) {
             toggleDirectoryFiles(node.children, checked);
             return true;
           } else if (node.children && findAndToggleDirectory(node.children)) {
@@ -623,6 +677,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       };
       
       findAndToggleDirectory(files);
+      console.log('[FileExplorer] Directory toggle:', filePath, 'checked:', checked, 'new selection size:', newCheckedFiles.size);
     } else {
       // Если это файл
       if (checked) {

@@ -573,34 +573,22 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                             </p>
                                         </div>
 
-                                        <div className="flex justify-between items-center">
-                                            {response.cached ? (
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
-                                                        Cached
-                                                    </div>
-                                                    {response.last_result?.executed_at && (
-                                                        <div className="text-[8px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            {new Date(response.last_result.executed_at).toLocaleString()}
-                                                        </div>
-                                                    )}
+                                        {response.cached && (
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
+                                                    Cached
                                                 </div>
-                                            ) : <div />}
-
-                                            <button
-                                                onClick={applyToSearch}
-                                                className="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-slate-600 flex items-center gap-1.5"
-                                            >
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" />
-                                                </svg>
-                                                Apply to Filter
-                                            </button>
-                                        </div>
+                                                {response.last_result?.executed_at && (
+                                                    <div className="text-[8px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                                        <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        {new Date(response.last_result.executed_at).toLocaleString()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -716,11 +704,22 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 )}
 
                                 {activeTab === 'raw' && (
-                                    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200 h-full flex flex-col">
-                                        <div className="flex-1 bg-slate-950 rounded border border-slate-700 overflow-hidden">
+                                    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200 h-full flex flex-col gap-3">
+                                        <div className="flex-1 bg-slate-950 rounded border border-slate-700 overflow-hidden shadow-inner">
                                             <pre className="h-full overflow-auto p-2.5 text-[10px] font-mono text-slate-400 selection:bg-blue-500/30">
                                                 <code>{JSON.stringify(response.raw, null, 2)}</code>
                                             </pre>
+                                        </div>
+                                        <div className="flex justify-end">
+                                            <button
+                                                onClick={applyToSearch}
+                                                className="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-slate-600 flex items-center gap-1.5"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" />
+                                                </svg>
+                                                Apply to Filter
+                                            </button>
                                         </div>
                                     </div>
                                 )}

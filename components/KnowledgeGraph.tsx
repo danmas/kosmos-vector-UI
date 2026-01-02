@@ -371,9 +371,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
     const filteredLinks = graphData.links.filter(link => {
-      const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
-      const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
-      return filteredNodeIds.has(s) && filteredNodeIds.has(t);
+      const s = typeof link.source === 'string' ? link.source : (link.source as any)?.id;
+      const t = typeof link.target === 'string' ? link.target : (link.target as any)?.id;
+      return s && t && s !== t && filteredNodeIds.has(s) && filteredNodeIds.has(t);
     });
 
     return {

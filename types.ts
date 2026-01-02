@@ -118,6 +118,24 @@ export interface PipelineStepsHistoryResponse {
   steps: PipelineStepHistory[];
 }
 
+export interface PipelineStepDefinition {
+  id: number;
+  name: string;
+  label: string;
+  description: string;
+  configurationSchema?: object;
+}
+
+export interface PipelineContextDefinition {
+  steps: PipelineStepDefinition[];
+}
+
+export interface PipelineContextConfig {
+  [stepName: string]: {
+    [key: string]: any;
+  };
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';

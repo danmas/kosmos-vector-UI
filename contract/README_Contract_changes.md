@@ -244,9 +244,35 @@ Language:
 
 ---
 
+## 9. Формат labels шагов pipeline (версия 2.1.3)
+
+**Дата изменения:** 02 января 2026
+
+**Описание:** Labels шагов pipeline теперь начинаются с префикса `+` для обозначения активных/добавляемых шагов.
+
+**Формат labels:**
+- `+Polyglot Parsing (L0)`
+- `+Dependency Analysis (L1)`
+- `+Semantic Enrichment (L2)`
+- `+Vectorization`
+- `+Index Construction`
+
+**Затронутые эндпоинты:**
+- `GET /api/pipeline/context-definition` — возвращает `steps[].label` с префиксом `+`
+- `GET /api/pipeline/steps/status` — label теперь управляется только через `context-definition`
+- `GET /api/kb-config` — `pipelineDefinitions[].label` с префиксом `+`
+
+**Изменения на фронтенде:**
+- Labels всегда берутся из `/api/pipeline/context-definition` 
+- Polling статуса (`fetchStepsStatus`) больше не перезаписывает labels
+
+**Обратная совместимость:** ✅ (только визуальное изменение)
+
+---
+
 ## Версионирование
 
-**Текущая версия API:** **2.1.2** (17 декабря 2025)
+**Текущая версия API:** **2.1.3** (02 января 2026)
 
 **Breaking changes:**
 - Обязательный `context-code`
@@ -255,6 +281,7 @@ Language:
 **Non-breaking changes:**
 - Новые маршруты и поля
 - Расширение поддержки языков
+- Labels шагов pipeline с префиксом `+`
 
 ---
 

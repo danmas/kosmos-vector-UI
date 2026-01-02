@@ -1,0 +1,15 @@
+{
+    "CARL": {
+        "parsing": {},
+        "dependencies": {},
+        "enrichment": {
+            "llmModel": "gemini-2.5-flash"
+        },
+        "vectorization": {
+            "embeddingModel": "text-embedding-004"
+        },
+        "indexing": {
+            "strategy": "Semantic"
+        }
+    }
+}

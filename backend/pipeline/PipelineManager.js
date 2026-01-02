@@ -16,11 +16,11 @@ export const PipelineStatus = {
  * Pipeline шаги
  */
 export const PipelineSteps = {
-  PARSING: { id: 1, name: 'parsing', label: 'Polyglot Parsing (L0)' },
-  DEPENDENCIES: { id: 2, name: 'dependencies', label: 'Dependency Analysis (L1)' },
-  ENRICHMENT: { id: 3, name: 'enrichment', label: 'Semantic Enrichment (L2)' },
-  VECTORIZATION: { id: 4, name: 'vectorization', label: 'Vectorization' },
-  INDEXING: { id: 5, name: 'indexing', label: 'Index Construction' }
+  PARSING: { id: 1, name: 'parsing', label: '+Polyglot Parsing (L0)' },
+  DEPENDENCIES: { id: 2, name: 'dependencies', label: '+Dependency Analysis (L1)' },
+  ENRICHMENT: { id: 3, name: 'enrichment', label: '+Semantic Enrichment (L2)' },
+  VECTORIZATION: { id: 4, name: 'vectorization', label: '+Vectorization' },
+  INDEXING: { id: 5, name: 'indexing', label: '+Index Construction' }
 };
 
 /**

@@ -12,11 +12,11 @@ const STEP_DETAILS: Record<number, string> = {
 };
 
 const STEP_LABELS: Record<number, string> = {
-  1: 'Polyglot Parsing (L0)',
-  2: 'Dependency Analysis (L1)',
-  3: 'Semantic Enrichment (L2)',
-  4: 'Vectorization',
-  5: 'Index Construction'
+  1: '+Polyglot Parsing (L0)',
+  2: '+Dependency Analysis (L1)',
+  3: '+Semantic Enrichment (L2)',
+  4: '+Vectorization',
+  5: '+Index Construction'
 };
 
 interface PipelineViewProps {
@@ -26,18 +26,15 @@ interface PipelineViewProps {
 const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
   const { invalidate, prefetchAll } = useDataCache();
   const [isRunning, setIsRunning] = useState(false);
-  const [steps, setSteps] = useState<PipelineStep[]>([
-    { id: '1', label: STEP_LABELS[1], status: 'pending', details: STEP_DETAILS[1] },
-    { id: '2', label: STEP_LABELS[2], status: 'pending', details: STEP_DETAILS[2] },
-    { id: '3', label: STEP_LABELS[3], status: 'pending', details: STEP_DETAILS[3] },
-    { id: '4', label: STEP_LABELS[4], status: 'pending', details: STEP_DETAILS[4] },
-    { id: '5', label: STEP_LABELS[5], status: 'pending', details: STEP_DETAILS[5] },
-  ]);
+  const [stepDefinitions, setStepDefinitions] = useState<import('../types').PipelineStepDefinition[]>([]);
+  const [contextConfig, setContextConfig] = useState<import('../types').PipelineContextConfig | null>(null);
+  const [steps, setSteps] = useState<PipelineStep[]>([]);
   const [loadingSteps, setLoadingSteps] = useState<Set<number>>(new Set());
   const [selectedStepReport, setSelectedStepReport] = useState<{ stepId: number; stepLabel: string; report: object } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  
+  const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+
   // Ref для отслеживания предыдущих статусов шагов (чтобы определить переход в completed)
   const prevStepsRef = useRef<PipelineStep[]>(steps);
 
@@ -60,17 +57,17 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
               } else if (serverStep.status === 'failed') {
                 status = 'error';
               }
-              
+
               return {
                 ...prevStep,
                 status,
-                label: serverStep.label || prevStep.label,
+                // label берётся из context-definition (loadContextData), не перезаписываем из status endpoint
                 report: (serverStep as any).report || null
               };
             }
             return prevStep;
           });
-          
+
           // Проверяем, какие шаги перешли из processing в completed
           const previousSteps = prevStepsRef.current;
           newSteps.forEach((newStep, index) => {
@@ -85,10 +82,10 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
               });
             }
           });
-          
+
           // Обновляем ref с новыми статусами
           prevStepsRef.current = newSteps;
-          
+
           return newSteps;
         });
       }
@@ -98,17 +95,79 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
     }
   };
 
-  // Инициализация ref при монтировании
-  useEffect(() => {
-    prevStepsRef.current = steps;
-  }, []);
+  // Загрузка определений и конфигурации
+  const loadContextData = async () => {
+    try {
+      const dbPromise = apiClient.getPipelineContextDefinition();
+      const configPromise = apiClient.getPipelineContextConfig();
+
+      const [dbRes, configRes] = await Promise.all([dbPromise, configPromise]);
+
+      if (dbRes.steps) {
+        setStepDefinitions(dbRes.steps);
+        // Всегда обновляем steps на основе определений с сервера (labels могут измениться)
+        setSteps(prev => {
+          if (prev.length === 0) {
+            // Первая инициализация
+            return dbRes.steps.map(s => ({
+              id: s.id.toString(),
+              label: s.label,
+              status: 'pending',
+              details: s.description
+            }));
+          }
+          // Обновляем labels из определений сервера, сохраняя статусы
+          return prev.map(prevStep => {
+            const serverDef = dbRes.steps.find(s => s.id.toString() === prevStep.id);
+            if (serverDef) {
+              return {
+                ...prevStep,
+                label: serverDef.label,  // Всегда берём label с сервера
+                details: serverDef.description
+              };
+            }
+            return prevStep;
+          });
+        });
+      }
+
+      if (configRes) {
+        setContextConfig(configRes);
+      }
+    } catch (error) {
+      console.error('Failed to load context data:', error);
+    }
+  };
 
   // Polling для обновления статуса
   useEffect(() => {
+    loadContextData();
     fetchStepsStatus(); // Загружаем сразу
     const interval = setInterval(fetchStepsStatus, 2000); // Обновляем каждые 2 секунды
     return () => clearInterval(interval);
   }, []);
+
+  const updateContextConfig = async (stepName: string, updates: any) => {
+    if (!contextConfig) return;
+
+    const newConfig = {
+      ...contextConfig,
+      [stepName]: {
+        ...contextConfig[stepName],
+        ...updates
+      }
+    };
+
+    setContextConfig(newConfig);
+    setIsUpdatingConfig(true);
+    try {
+      await apiClient.updatePipelineContextConfig(newConfig);
+    } catch (error) {
+      console.error('Failed to update context config:', error);
+    } finally {
+      setIsUpdatingConfig(false);
+    }
+  };
 
   // Запуск отдельного шага
   const runStep = async (stepId: number) => {
@@ -121,9 +180,9 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
     onOpenLogs?.();
 
     setLoadingSteps(prev => new Set(prev).add(stepId));
-    
+
     // Обновляем локальное состояние сразу
-    setSteps(prev => prev.map(s => 
+    setSteps(prev => prev.map(s =>
       s.id === stepId.toString() ? { ...s, status: 'processing' } : s
     ));
 
@@ -132,7 +191,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
       // Статус будет обновлен через polling
     } catch (error) {
       console.error(`Failed to run step ${stepId}:`, error);
-      setSteps(prev => prev.map(s => 
+      setSteps(prev => prev.map(s =>
         s.id === stepId.toString() ? { ...s, status: 'error' } : s
       ));
     } finally {
@@ -147,7 +206,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
   const runPipeline = () => {
     if (isRunning) return;
     setIsRunning(true);
-    
+
     // Reset
     setSteps(steps.map(s => ({ ...s, status: 'pending' })));
 
@@ -202,166 +261,183 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
       <div className="mb-3 text-center">
         <h2 className="text-xl font-bold text-white mb-1">Knowledge Processing Pipeline</h2>
         <p className="text-slate-400 text-sm">
-            This pipeline transforms raw source code into a vectorized knowledge base ready for RAG.
+          This pipeline transforms raw source code into a vectorized knowledge base ready for RAG.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Pipeline Steps */}
-          <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 shadow-xl">
-            <div className="space-y-3">
-              {steps.map((step, index) => (
-                <div key={step.id} className="relative pl-8">
-                  {/* Connector Line */}
-                  {index !== steps.length - 1 && (
-                    <div className={`absolute left-[15px] top-6 bottom-[-12px] w-0.5 ${
-                      step.status === 'completed' ? 'bg-green-500' : 'bg-slate-700'
+        {/* Pipeline Steps */}
+        <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 shadow-xl">
+          <div className="space-y-3">
+            {steps.map((step, index) => (
+              <div key={step.id} className="relative pl-8">
+                {/* Connector Line */}
+                {index !== steps.length - 1 && (
+                  <div className={`absolute left-[15px] top-6 bottom-[-12px] w-0.5 ${step.status === 'completed' ? 'bg-green-500' : 'bg-slate-700'
                     }`} />
-                  )}
-                  
-                  {/* Status Icon - кликабельный */}
-                  <div 
-                    onClick={() => runStep(index + 1)}
-                    className={`absolute left-0 top-0.5 w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-slate-800 transition-all text-xs ${
-                      step.status === 'completed' ? 'border-green-500 text-green-500 hover:border-green-400 hover:bg-green-900/20 cursor-pointer' :
-                      step.status === 'processing' ? 'border-blue-500 text-blue-500 animate-pulse cursor-wait' :
-                      step.status === 'error' ? 'border-red-500 text-red-500 hover:border-red-400 hover:bg-red-900/20 cursor-pointer' :
-                      'border-slate-600 text-slate-600 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-900/20 cursor-pointer'
-                    }`}
-                    title={step.status === 'processing' ? 'Processing...' : `Click to run ${step.label}`}
-                  >
-                    {step.status === 'completed' ? '✓' : 
-                     step.status === 'processing' ? '↻' : 
-                     (index + 1)}
-                  </div>
+                )}
 
-                  {/* Content */}
-                  <div className={`p-2 rounded-lg border transition-all ${
-                     step.status === 'processing' ? 'bg-blue-900/20 border-blue-500/50' :
-                     step.status === 'completed' ? 'bg-green-900/10 border-green-500/30' :
-                     'bg-slate-900 border-slate-700'
+                {/* Status Icon - кликабельный */}
+                <div
+                  onClick={() => runStep(index + 1)}
+                  className={`absolute left-0 top-0.5 w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-slate-800 transition-all text-xs ${step.status === 'completed' ? 'border-green-500 text-green-500 hover:border-green-400 hover:bg-green-900/20 cursor-pointer' :
+                      step.status === 'processing' ? 'border-blue-500 text-blue-500 animate-pulse cursor-wait' :
+                        step.status === 'error' ? 'border-red-500 text-red-500 hover:border-red-400 hover:bg-red-900/20 cursor-pointer' :
+                          'border-slate-600 text-slate-600 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-900/20 cursor-pointer'
+                    }`}
+                  title={step.status === 'processing' ? 'Processing...' : `Click to run ${step.label}`}
+                >
+                  {step.status === 'completed' ? '✓' :
+                    step.status === 'processing' ? '↻' :
+                      (index + 1)}
+                </div>
+
+                {/* Content */}
+                <div className={`p-2 rounded-lg border transition-all ${step.status === 'processing' ? 'bg-blue-900/20 border-blue-500/50' :
+                    step.status === 'completed' ? 'bg-green-900/10 border-green-500/30' :
+                      'bg-slate-900 border-slate-700'
                   }`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className={`font-semibold text-sm ${
-                          step.status === 'completed' ? 'text-green-400' : 
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className={`font-semibold text-sm ${step.status === 'completed' ? 'text-green-400' :
                           step.status === 'processing' ? 'text-blue-400' : 'text-slate-300'
                         }`}>{step.label}</h3>
-                        <p className="text-slate-500 text-xs mt-0.5">{step.details}</p>
-                      </div>
-                      {(step.status === 'completed' || step.status === 'error') && step.report && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedStepReport({
-                              stepId: parseInt(step.id),
-                              stepLabel: step.label,
-                              report: step.report!
-                            });
-                          }}
-                          className="ml-1.5 px-2 py-0.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/30 border border-blue-500/50 hover:border-blue-400/70 rounded transition-all"
-                          title="Показать результат выполнения"
-                        >
-                          Результат
-                        </button>
-                      )}
+                      <p className="text-slate-500 text-xs mt-0.5">{step.details}</p>
                     </div>
-                    
-                    {step.status === 'processing' && (
-                      <div className="mt-2 w-full bg-slate-700 rounded-full h-1 overflow-hidden">
-                        <div className="bg-blue-500 h-1 rounded-full animate-progress"></div>
-                      </div>
+                    {(step.status === 'completed' || step.status === 'error') && step.report && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStepReport({
+                            stepId: parseInt(step.id),
+                            stepLabel: step.label,
+                            report: step.report!
+                          });
+                        }}
+                        className="ml-1.5 px-2 py-0.5 text-xs font-medium text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/30 border border-blue-500/50 hover:border-blue-400/70 rounded transition-all"
+                        title="Показать результат выполнения"
+                      >
+                        Результат
+                      </button>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
 
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
-                  const historyUrl = `/history.html?context-code=${encodeURIComponent(contextCode)}`;
-                  window.open(historyUrl, 'pipeline-history', 'width=1200,height=800,resizable=yes,scrollbars=yes');
-                }}
-                className="px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500"
-              >
-                История
-              </button>
-              <button
-                onClick={() => setShowClearConfirm(true)}
-                disabled={isClearing}
-                className={`px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 ${
-                  isClearing ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500'
+                  {step.status === 'processing' && (
+                    <div className="mt-2 w-full bg-slate-700 rounded-full h-1 overflow-hidden">
+                      <div className="bg-blue-500 h-1 rounded-full animate-progress"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={() => {
+                const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
+                const historyUrl = `/history.html?context-code=${encodeURIComponent(contextCode)}`;
+                window.open(historyUrl, 'pipeline-history', 'width=1200,height=800,resizable=yes,scrollbars=yes');
+              }}
+              className="px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500"
+            >
+              История
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              disabled={isClearing}
+              className={`px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 ${isClearing ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500'
                 }`}
-              >
-                {isClearing ? 'Очистка...' : 'Очистить БД'}
-              </button>
-              <button
-                onClick={runPipeline}
-                disabled={isRunning}
-                className={`px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 ${
-                  isRunning ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
+            >
+              {isClearing ? 'Очистка...' : 'Очистить БД'}
+            </button>
+            <button
+              onClick={runPipeline}
+              disabled={isRunning}
+              className={`px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 ${isRunning ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
                 }`}
-              >
-                {isRunning ? 'Processing...' : 'Run Simulation'}
-              </button>
+            >
+              {isRunning ? 'Processing...' : 'Run Simulation'}
+            </button>
+          </div>
+        </div>
+
+        {/* Info / Theory Panel */}
+        <div className="space-y-3">
+          <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
+            <h3 className="text-sm font-bold text-white mb-2">How Vectorization Works</h3>
+            <div className="text-slate-400 text-xs space-y-1.5">
+              <p>
+                1. <span className="text-blue-400 font-bold">Chunking:</span> Code is not split by lines, but by "AiItems" (functions/classes). This preserves context.
+              </p>
+              <p>
+                2. <span className="text-blue-400 font-bold">Description Generation:</span> An LLM reads the code and generates a summary (L2).
+                <br />
+                <em className="text-slate-500">"This function calculates the Fibonacci sequence recursively."</em>
+              </p>
+              <p>
+                3. <span className="text-blue-400 font-bold">Embedding:</span> The summary + signature is sent to an Embedding Model (e.g., Gemini Embedding) to produce a vector (e.g., `[0.1, -0.5, ...]`).
+              </p>
+              <p>
+                4. <span className="text-blue-400 font-bold">Storage:</span> Vectors are saved in a local `faiss.index` file for millisecond-speed retrieval.
+              </p>
             </div>
           </div>
 
-          {/* Info / Theory Panel */}
-          <div className="space-y-3">
-             <div className="bg-slate-900 p-3 rounded-xl border border-slate-700">
-                <h3 className="text-sm font-bold text-white mb-2">How Vectorization Works</h3>
-                <div className="text-slate-400 text-xs space-y-1.5">
-                    <p>
-                        1. <span className="text-blue-400 font-bold">Chunking:</span> Code is not split by lines, but by "AiItems" (functions/classes). This preserves context.
-                    </p>
-                    <p>
-                        2. <span className="text-blue-400 font-bold">Description Generation:</span> An LLM reads the code and generates a summary (L2).
-                        <br/>
-                        <em className="text-slate-500">"This function calculates the Fibonacci sequence recursively."</em>
-                    </p>
-                    <p>
-                        3. <span className="text-blue-400 font-bold">Embedding:</span> The summary + signature is sent to an Embedding Model (e.g., Gemini Embedding) to produce a vector (e.g., `[0.1, -0.5, ...]`).
-                    </p>
-                    <p>
-                        4. <span className="text-blue-400 font-bold">Storage:</span> Vectors are saved in a local `faiss.index` file for millisecond-speed retrieval.
-                    </p>
-                </div>
-             </div>
-
-             <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <h3 className="text-white font-bold mb-2 text-sm">Configuration</h3>
-                <div className="space-y-2">
-                    <div>
-                        <label className="block text-xs text-slate-500 uppercase mb-0.5">Embedding Model</label>
-                        <select className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7">
-                            <option>Google Gemini (text-embedding-004)</option>
-                            <option>OpenAI (text-embedding-3-small)</option>
-                            <option>Local (SentenceTransformers)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs text-slate-500 uppercase mb-0.5">Chunk Strategy</label>
-                        <select className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7">
-                            <option>Semantic (AiItem / Function-based)</option>
-                            <option>Fixed Size (512 tokens)</option>
-                            <option>File-based</option>
-                        </select>
-                    </div>
-                </div>
-             </div>
+          <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
+            <h3 className="text-white font-bold mb-2 text-sm flex justify-between items-center">
+              Configuration
+              {isUpdatingConfig && <span className="text-[10px] text-blue-400 animate-pulse font-normal">Saving...</span>}
+            </h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-slate-500 uppercase mb-0.5">Embedding Model</label>
+                <select
+                  value={contextConfig?.vectorization?.embeddingModel || 'text-embedding-004'}
+                  onChange={(e) => updateContextConfig('vectorization', { embeddingModel: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7 focus:border-blue-500 outline-none"
+                >
+                  <option value="text-embedding-004">Google Gemini (text-embedding-004)</option>
+                  <option value="text-embedding-3-small">OpenAI (text-embedding-3-small)</option>
+                  <option value="local">Local (SentenceTransformers)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 uppercase mb-0.5">Chunk Strategy</label>
+                <select
+                  value={contextConfig?.indexing?.strategy || 'Semantic'}
+                  onChange={(e) => updateContextConfig('indexing', { strategy: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7 focus:border-blue-500 outline-none"
+                >
+                  <option value="Semantic">Semantic (AiItem / Function-based)</option>
+                  <option value="FixedSize">Fixed Size (512 tokens)</option>
+                  <option value="FileBased">File-based</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 uppercase mb-0.5">LLM Model (Enrichment)</label>
+                <select
+                  value={contextConfig?.enrichment?.llmModel || 'gemini-2.5-flash'}
+                  onChange={(e) => updateContextConfig('enrichment', { llmModel: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7 focus:border-blue-500 outline-none"
+                >
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                </select>
+              </div>
+            </div>
           </div>
+        </div>
       </div>
 
       {/* Диалог подтверждения очистки векторной БД */}
       {showClearConfirm && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => !isClearing && setShowClearConfirm(false)}
         >
-          <div 
+          <div
             className="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
@@ -414,11 +490,11 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
 
       {/* Диалог с результатом выполнения шага */}
       {selectedStepReport && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedStepReport(null)}
         >
-          <div 
+          <div
             className="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >

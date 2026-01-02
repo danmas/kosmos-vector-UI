@@ -79,7 +79,7 @@ export class ApiClient {
     // Используем полный URL для логирования (с хостом и портом)
     const baseForUrl = this.baseUrl || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
     // Добавляем context-code только если его еще нет в endpoint
-    const url = hasContextCode 
+    const url = hasContextCode
       ? `${baseForUrl}${endpoint}`
       : `${baseForUrl}${endpoint}${separator}context-code=${encodeURIComponent(contextCode)}`;
     const method = options.method || 'GET';
@@ -453,6 +453,24 @@ export class ApiClient {
   async clearVectorDatabase(): Promise<{ success: boolean; message: string; deletedFiles?: string[]; errors?: string[] }> {
     return this.request<{ success: boolean; message: string; deletedFiles?: string[]; errors?: string[] }>('/api/vector-db', {
       method: 'DELETE',
+    });
+  }
+
+  // GET /api/pipeline/context-definition - получить определения шагов
+  async getPipelineContextDefinition(): Promise<{ steps: import('../types').PipelineStepDefinition[] }> {
+    return this.request<{ steps: import('../types').PipelineStepDefinition[] }>('/api/pipeline/context-definition');
+  }
+
+  // GET /api/pipeline/context-config - получить конфигурацию шагов
+  async getPipelineContextConfig(): Promise<any> {
+    return this.request<any>('/api/pipeline/context-config');
+  }
+
+  // POST /api/pipeline/context-config - обновить конфигурацию шагов
+  async updatePipelineContextConfig(config: any): Promise<{ success: boolean; config: any }> {
+    return this.request<{ success: boolean; config: any }>('/api/pipeline/context-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
     });
   }
 

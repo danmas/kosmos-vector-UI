@@ -86,11 +86,11 @@ class ProgressSession extends EventEmitter {
     
     // История прогресса по шагам
     this.steps = [
-      { id: 1, name: 'parsing', label: 'Polyglot Parsing (L0)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
-      { id: 2, name: 'dependencies', label: 'Dependency Analysis (L1)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
-      { id: 3, name: 'enrichment', label: 'Semantic Enrichment (L2)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
-      { id: 4, name: 'vectorization', label: 'Vectorization', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
-      { id: 5, name: 'indexing', label: 'Index Construction', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 }
+      { id: 1, name: 'parsing', label: '+Polyglot Parsing (L0)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
+      { id: 2, name: 'dependencies', label: '+Dependency Analysis (L1)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
+      { id: 3, name: 'enrichment', label: '+Semantic Enrichment (L2)', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
+      { id: 4, name: 'vectorization', label: '+Vectorization', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 },
+      { id: 5, name: 'indexing', label: '+Index Construction', progress: 0, startTime: null, endTime: null, itemsProcessed: 0, totalItems: 0 }
     ];
     
     this.currentStepIndex = 0;

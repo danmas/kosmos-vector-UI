@@ -212,11 +212,11 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
+          <div className="flex items-center gap-2">
             <div className="p-2 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-900/20">
               <Cpu className="w-6 h-6 text-white" />
             </div>
@@ -238,11 +238,11 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-1 overflow-hidden p-6 gap-6">
+        <div className="flex flex-1 overflow-hidden p-1.5 gap-1.5">
           {/* Left Panel: JSON Editor */}
-          <div className="w-1/3 flex flex-col gap-4">
+          <div className="w-1/3 flex flex-col gap-2">
             <div className="flex-1 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-              <div className="flex items-center justify-between px-4 py-2 bg-slate-800/50 border-b border-slate-800">
+              <div className="flex items-center justify-between px-2 py-1 bg-slate-800/50 border-b border-slate-800">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <Terminal className="w-4 h-4 text-emerald-400" />
                   Входной JSON дескриптор
@@ -263,7 +263,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder='Вставьте ваш JSON здесь...'
-                  className="absolute inset-0 w-full h-full p-4 bg-transparent font-mono text-sm focus:outline-none resize-none placeholder:text-slate-700 scroll-smooth text-slate-200"
+                  className="absolute inset-0 w-full h-full p-2 bg-transparent font-mono text-sm focus:outline-none resize-none placeholder:text-slate-700 scroll-smooth text-slate-200"
                 />
               </div>
 
@@ -274,11 +274,11 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                 </div>
               )}
 
-              <div className="p-4 border-t border-slate-800 bg-slate-900/80">
+              <div className="p-2 border-t border-slate-800 bg-slate-900/80">
                 <button
                   onClick={handleProcess}
                   disabled={isLoading}
-                  className={`w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 font-semibold transition-all shadow-lg active:scale-[0.98] ${
+                  className={`w-full py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all shadow-lg active:scale-[0.98] text-sm ${
                     isLoading 
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
@@ -286,13 +286,13 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                 >
                   {isLoading ? (
                     <>
-                      <RefreshCcw className="w-5 h-5 animate-spin" />
+                      <RefreshCcw className="w-4 h-4 animate-spin" />
                       Анализ логики...
                     </>
                   ) : (
                     <>
-                      <Play className="w-4 h-4 fill-current" />
-                      Визуализировать
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      Build logic
                     </>
                   )}
                 </button>

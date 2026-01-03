@@ -113,9 +113,9 @@ const L2SemanticsView: React.FC<L2SemanticsViewProps> = ({ item, showEmbeddings 
         <h3 className="text-blue-300 font-bold text-sm">Semantic Analysis</h3>
         <button
           onClick={() => setShowLogicDialog(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.98]"
+          className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.98] text-sm"
         >
-          <Cpu className="w-4 h-4" />
+          <Cpu className="w-3 h-3" />
           Logic Architect
         </button>
       </div>

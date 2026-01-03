@@ -46,6 +46,11 @@ export class ApiError extends Error {
   }
 }
 
+// Расширенные опции запроса с поддержкой contextCode
+interface ExtendedRequestInit extends RequestInit {
+  contextCode?: string;
+}
+
 export class ApiClient {
   private baseUrl: string;
   private isDemoMode: boolean;
@@ -60,15 +65,15 @@ export class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: ExtendedRequestInit = {}
   ): Promise<T> {
     // If demo mode is explicitly enabled, throw error to indicate no API available
     if (this.isDemoMode) {
       throw new ApiError('Demo mode is active - API not available', 503, 'DEMO_MODE');
     }
 
-    // Получаем context-code из глобальной переменной
-    const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
+    // Получаем context-code из опций или глобальной переменной
+    const contextCode = options.contextCode || (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
 
     // Формируем URL с context-code
     // Проверяем, есть ли уже query параметры в endpoint
@@ -322,8 +327,8 @@ export class ApiClient {
   }
 
   // GET /api/items-list - получение списка метаданных AiItem
-  async getItemsList(): Promise<AiItemSummary[]> {
-    return this.request<AiItemSummary[]>('/api/items-list');
+  async getItemsList(contextCode?: string): Promise<AiItemSummary[]> {
+    return this.request<AiItemSummary[]>('/api/items-list', { contextCode });
   }
 
   // GET /api/items/:id - получение конкретного AiItem
@@ -370,8 +375,8 @@ export class ApiClient {
   }
 
   // GET /api/graph - данные для Knowledge Graph
-  async getGraph(): Promise<GraphData> {
-    return this.request<GraphData>('/api/graph');
+  async getGraph(contextCode?: string): Promise<GraphData> {
+    return this.request<GraphData>('/api/graph', { contextCode });
   }
 
   // POST /api/chat - RAG чат
@@ -608,9 +613,9 @@ export const getItemsWithFallback = async (): Promise<{ data: AiItem[]; isDemo: 
   }
 };
 
-export const getItemsListWithFallback = async (): Promise<{ data: AiItemSummary[]; isDemo: boolean }> => {
+export const getItemsListWithFallback = async (contextCode?: string): Promise<{ data: AiItemSummary[]; isDemo: boolean }> => {
   try {
-    const data = await apiClient.getItemsList();
+    const data = await apiClient.getItemsList(contextCode);
     return { data, isDemo: false };
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'SERVER_UNAVAILABLE' || error.code === 'NETWORK_ERROR')) {
@@ -666,9 +671,9 @@ export const getStatsWithFallback = async (): Promise<{ data: DashboardStats; is
   }
 };
 
-export const getGraphWithFallback = async (): Promise<{ data: GraphData; isDemo: boolean }> => {
+export const getGraphWithFallback = async (contextCode?: string): Promise<{ data: GraphData; isDemo: boolean }> => {
   try {
-    const data = await apiClient.getGraph();
+    const data = await apiClient.getGraph(contextCode);
     return { data, isDemo: false };
   } catch (error) {
     if (error instanceof ApiError && (error.code === 'SERVER_UNAVAILABLE' || error.code === 'NETWORK_ERROR')) {

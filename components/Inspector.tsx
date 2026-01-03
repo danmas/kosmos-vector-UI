@@ -39,6 +39,9 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
+  
+  // Ref для отслеживания контекста, с которым был выбран элемент
+  const selectedIdContextRef = useRef<string | null>(null);
 
   // Отладка изменения поиска
   useEffect(() => {
@@ -47,9 +50,10 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Загрузка списка метаданных: сначала из кэша, затем с сервера
   useEffect(() => {
-    // Очищаем выбранный элемент при смене контекста
+    // Очищаем выбранный элемент и список при смене контекста
     setSelectedId(null);
     setFullItemData(null);
+    setItemsList([]); // Важно: очищаем список, чтобы старые элементы не проходили проверку
     
     const loadItemsList = async () => {
       console.log(`[Inspector] loadItemsList запущен для контекста: ${currentContextCode}`);
@@ -68,6 +72,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         setIsLoading(false);
         // Set first item as selected by default
         if (cached.data.length > 0) {
+          selectedIdContextRef.current = currentContextCode;
           setSelectedId(cached.data[0].id);
         }
         return;
@@ -93,6 +98,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         setDataSource('server');
         // Set first item as selected by default and load its full data
         if (result.data.length > 0) {
+          selectedIdContextRef.current = currentContextCode;
           setSelectedId(result.data[0].id);
         }
       } catch (err) {
@@ -122,12 +128,28 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Загрузка полных данных при выборе элемента
   useEffect(() => {
-    if (selectedId) {
-      loadFullItemData(selectedId);
-    } else {
+    // Проверяем, что элемент существует в текущем списке (принадлежит текущему контексту)
+    // И что контекст не изменился с момента выбора элемента
+    if (selectedId && itemsList.length > 0) {
+      // Проверяем, что контекст совпадает с тем, при котором был выбран элемент
+      if (selectedIdContextRef.current !== currentContextCode) {
+        console.log(`[Inspector] Context mismatch: selectedId from "${selectedIdContextRef.current}", current is "${currentContextCode}", skipping load`);
+        return;
+      }
+      
+      const existsInCurrentContext = itemsList.some(item => item.id === selectedId);
+      if (existsInCurrentContext) {
+        loadFullItemData(selectedId);
+      } else {
+        // Элемент из другого контекста — сбрасываем выбор
+        console.log(`[Inspector] Selected item "${selectedId}" not found in current context, resetting...`);
+        setSelectedId(null);
+        setFullItemData(null);
+      }
+    } else if (!selectedId) {
       setFullItemData(null);
     }
-  }, [selectedId]);
+  }, [selectedId, itemsList, currentContextCode]);
 
   // Мемоизируем filteredItems чтобы избежать пересоздания на каждый рендер
   // Поддержка regex: если поиск обёрнут в /.../ — используется регулярное выражение
@@ -313,7 +335,10 @@ const Inspector: React.FC<InspectorProps> = () => {
           {filteredItems.map(item => (
             <div
               key={item.id}
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => {
+                selectedIdContextRef.current = currentContextCode;
+                setSelectedId(item.id);
+              }}
               className={`p-3 border-b border-slate-700/50 cursor-pointer hover:bg-slate-800 transition-colors ${selectedId === item.id ? 'bg-blue-900/20 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'
                 }`}
             >

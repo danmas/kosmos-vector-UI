@@ -332,9 +332,9 @@ const AppContent: React.FC = () => {
       case AppView.PIPELINE:
         return <PipelineView onOpenLogs={() => setIsLogsDialogOpen(true)} />;
       case AppView.INSPECTOR:
-        return <Inspector />;
+        return <Inspector key={contextCode} />;
       case AppView.GRAPH:
-        return <KnowledgeGraph />;
+        return <KnowledgeGraph key={contextCode} />;
       case AppView.CHAT:
         return <ChatInterface />;
       case AppView.LOGS:

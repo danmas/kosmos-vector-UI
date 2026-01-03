@@ -163,10 +163,10 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     setPrefetchProgress({ loaded: 0, total: 2 });
     
     try {
-      // Загружаем данные параллельно
+      // Загружаем данные параллельно, передавая contextCode явно
       const results = await Promise.allSettled([
-        getGraphWithFallback(),
-        getItemsListWithFallback()
+        getGraphWithFallback(targetContext),
+        getItemsListWithFallback(targetContext)
       ]);
       
       let loaded = 0;

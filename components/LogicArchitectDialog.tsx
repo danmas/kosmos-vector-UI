@@ -26,7 +26,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
   const handleLoadGraph = useCallback(async (silent: boolean = false) => {
     if (!item?.id) {
       if (!silent) {
-        setError("Не выбран элемент для загрузки");
+        setError("No item selected for loading");
       }
       return;
     }
@@ -45,11 +45,11 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       if (err.status === 404) {
         // 404 - это нормально при первом открытии, не показываем ошибку при автозагрузке
         if (!silent) {
-          setError("Анализ логики не найден на сервере для данного элемента");
+          setError("Logic analysis not found on server for this item");
         }
       } else {
         if (!silent) {
-          setError(err.message || "Ошибка при загрузке анализа логики");
+          setError(err.message || "Error loading logic analysis");
         }
       }
       console.error("Load Graph Error:", err);
@@ -114,13 +114,13 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       if (objects.length > 0) {
         return objects.reduce((acc, curr) => ({ ...acc, ...curr }), {});
       }
-      throw new Error("Не удалось распознать JSON. Проверьте синтаксис.");
+      throw new Error("Failed to parse JSON. Check syntax.");
     }
   };
 
   const handleProcess = async () => {
     if (!inputText.trim()) {
-      setError("Пожалуйста, введите JSON описание функции");
+      setError("Please enter JSON function description");
       return;
     }
 
@@ -132,7 +132,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       const parsed = sanitizeAndParse(inputText);
       
       if (!parsed.body) {
-        throw new Error("JSON должен содержать поле 'body' с исходным кодом функции.");
+        throw new Error("JSON must contain 'body' field with function source code.");
       }
       
       const response: LogicAnalysisResponse = await analyzeFunctionLogicFromMetadata(parsed as FunctionMetadata);
@@ -156,7 +156,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
         }
       }
     } catch (err: any) {
-      setError(err.message || "Ошибка при анализе кода.");
+      setError(err.message || "Error analyzing code.");
       console.error("Parse Error:", err);
     } finally {
       setIsLoading(false);
@@ -169,7 +169,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       setInputText(JSON.stringify(parsed, null, 2));
       setError(null);
     } catch (err: any) {
-      setError("Ошибка форматирования: " + err.message);
+      setError("Formatting error: " + err.message);
     }
   };
 
@@ -181,12 +181,12 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
 
   const handleSaveGraph = async () => {
     if (!item?.id) {
-      setError("Не выбран элемент для сохранения");
+      setError("No item selected for saving");
       return;
     }
 
     if (!graph || !logicDescription) {
-      setError("Нет данных для сохранения. Сначала выполните анализ логики.");
+      setError("No data to save. First perform logic analysis.");
       return;
     }
 
@@ -202,7 +202,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      setError(err.message || "Ошибка при сохранении анализа логики");
+      setError(err.message || "Error saving logic analysis");
       console.error("Save Graph Error:", err);
     } finally {
       setIsSavingGraph(false);
@@ -225,7 +225,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                 Logic Architect <span className="text-[10px] font-normal px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-full text-indigo-400 uppercase tracking-wider">Gemini 3 Flash</span>
               </h2>
               <p className="text-xs text-slate-400">
-                {item ? `Анализ: ${item.id}` : 'Визуализация логики функций и хранимых процедур'}
+                {item ? `Analysis: ${item.id}` : 'Visualization of function and stored procedure logic'}
               </p>
             </div>
           </div>
@@ -245,12 +245,12 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
               <div className="flex items-center justify-between px-2 py-1 bg-slate-800/50 border-b border-slate-800">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <Terminal className="w-4 h-4 text-emerald-400" />
-                  Входной JSON дескриптор
+                  Input JSON Descriptor
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={handleFormat}
-                    title="Исправить и отформатировать JSON"
+                    title="Fix and format JSON"
                     className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
                   >
                     <Wand2 className="w-3.5 h-3.5" />
@@ -262,7 +262,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder='Вставьте ваш JSON здесь...'
+                  placeholder='Paste your JSON here...'
                   className="absolute inset-0 w-full h-full p-2 bg-transparent font-mono text-sm focus:outline-none resize-none placeholder:text-slate-700 scroll-smooth text-slate-200"
                 />
               </div>
@@ -287,7 +287,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                   {isLoading ? (
                     <>
                       <RefreshCcw className="w-4 h-4 animate-spin" />
-                      Анализ логики...
+                      Analyzing logic...
                     </>
                   ) : (
                     <>
@@ -304,7 +304,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
               <div className="flex items-center justify-between mb-3 shrink-0">
                 <h3 className="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
                   <FileText className="w-3 h-3" />
-                  Описание логики
+                  Logic Description
                 </h3>
                 <div className="flex items-center gap-2">
                   {item?.id && (
@@ -313,20 +313,20 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                         onClick={handleLoadGraph}
                         disabled={isLoadingGraph || isLoading}
                         className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-[10px] font-bold text-emerald-400 transition-colors uppercase border border-slate-700"
-                        title="Загрузить сохраненный анализ с сервера"
+                        title="Load saved analysis from server"
                       >
                         {isLoadingGraph ? (
                           <RefreshCcw className="w-3 h-3 animate-spin" />
                         ) : (
                           <Download className="w-3 h-3" />
                         )}
-                        {isLoadingGraph ? 'Загрузка...' : 'Загрузить'}
+                        {isLoadingGraph ? 'Loading...' : 'Load'}
                       </button>
                       <button 
                         onClick={handleSaveGraph}
                         disabled={isSavingGraph || isLoading || !graph || !logicDescription}
                         className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-[10px] font-bold text-blue-400 transition-colors uppercase border border-slate-700"
-                        title="Сохранить анализ на сервер"
+                        title="Save analysis to server"
                       >
                         {isSavingGraph ? (
                           <RefreshCcw className="w-3 h-3 animate-spin" />
@@ -335,7 +335,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                         ) : (
                           <Upload className="w-3 h-3" />
                         )}
-                        {isSavingGraph ? 'Сохранение...' : saveSuccess ? 'Сохранено' : 'Сохранить'}
+                        {isSavingGraph ? 'Saving...' : saveSuccess ? 'Saved' : 'Save'}
                       </button>
                     </>
                   )}
@@ -343,10 +343,10 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                     <button 
                       onClick={copyToClipboard}
                       className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] font-bold text-indigo-400 transition-colors uppercase border border-slate-700"
-                      title="Копировать JSON в буфер обмена"
+                      title="Copy JSON to clipboard"
                     >
                       {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copied ? 'Скопировано' : 'Копировать JSON'}
+                      {copied ? 'Copied' : 'Copy JSON'}
                     </button>
                   )}
                 </div>
@@ -358,7 +358,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
               ) : (
                 <div className="flex flex-col items-center justify-center flex-1 text-slate-600 text-center py-4">
                   <Code className="w-6 h-6 mb-2 opacity-20" />
-                  <p className="text-xs">Текстовое описание появится после анализа</p>
+                  <p className="text-xs">Text description will appear after analysis</p>
                 </div>
               )}
             </div>
@@ -373,7 +373,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
         {/* Footer */}
         <div className="px-6 py-2 border-t border-slate-800 bg-slate-900/30 text-[10px] text-slate-500 flex justify-between">
           <div className="flex items-center gap-4">
-            <span>Поддержка: PL/pgSQL, JS/TS, Python</span>
+            <span>Support: PL/pgSQL, JS/TS, Python</span>
             <span className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> 
               Gemini Reasoning Engine Online

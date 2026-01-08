@@ -8,6 +8,7 @@ import ChatInterface from './components/ChatInterface';
 import Inspector from './components/Inspector';
 import LogViewer from './components/LogViewer';
 import ServerLogsDialog from './components/ServerLogsDialog';
+import PromptsEditorDialog from './components/PromptsEditorDialog';
 import { AppView, FileNode, ProjectFile } from './types';
 import { MOCK_FILE_TREE } from './constants';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from './services/apiClient';
@@ -32,6 +33,7 @@ const AppContent: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [excludedFiles, setExcludedFiles] = useState<string[]>([]);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState<boolean>(false);
+  const [isPromptsEditorOpen, setIsPromptsEditorOpen] = useState<boolean>(false);
   
   // v2.1.1: Переключатель между legacy и новым API
   const [useNewApi, setUseNewApi] = useState<boolean>(true);
@@ -350,6 +352,7 @@ const AppContent: React.FC = () => {
         currentView={currentView} 
         onChangeView={setCurrentView}
         onOpenLogsDialog={() => setIsLogsDialogOpen(true)}
+        onOpenPromptsEditor={() => setIsPromptsEditorOpen(true)}
         contextCode={contextCode}
         setContextCode={setContextCode}
         availableContextCodes={availableContextCodes}
@@ -395,6 +398,10 @@ const AppContent: React.FC = () => {
       <ServerLogsDialog 
         isOpen={isLogsDialogOpen}
         onClose={() => setIsLogsDialogOpen(false)}
+      />
+      <PromptsEditorDialog
+        isOpen={isPromptsEditorOpen}
+        onClose={() => setIsPromptsEditorOpen(false)}
       />
     </div>
   );

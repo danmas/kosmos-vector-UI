@@ -283,3 +283,54 @@ export interface AgentScriptDetailResponse {
   success: boolean;
   script: AgentScript;
 }
+
+// ────────────────────────────────────── Prompts Types (v2.4.0)
+
+export interface PromptTemplate {
+  prompt: string;
+  inputText: string;
+}
+
+export interface NaturalQueryPrompts {
+  scriptGeneration: string; // плейсхолдер: {question}
+  humanize: string;         // плейсхолдеры: {question}, {rawData}
+}
+
+export interface RagPrompts {
+  systemPrompt: string;
+  userPromptTemplate: string; // плейсхолдеры: {context}, {question}
+}
+
+export interface VectorOperationsPrompts {
+  qaPromptTemplate: string; // плейсхолдеры: {context}, {question}
+}
+
+export interface L1L2TemplateLevel {
+  l1?: PromptTemplate;
+  l2?: PromptTemplate;
+}
+
+export interface L1L2Templates {
+  sql?: Record<string, L1L2TemplateLevel>;
+  js?: Record<string, L1L2TemplateLevel>;
+  md?: Record<string, L1L2TemplateLevel>;
+}
+
+export interface PromptsConfig {
+  l1l2Templates: L1L2Templates;
+  rag: RagPrompts;
+  naturalQuery: NaturalQueryPrompts;
+  vectorOperations: VectorOperationsPrompts;
+}
+
+export interface PromptsConfigResponse {
+  success: boolean;
+  prompts: PromptsConfig;
+  savedAt?: string;
+}
+
+export interface PromptCategoryResponse {
+  success: boolean;
+  category: string;
+  data: any;
+}

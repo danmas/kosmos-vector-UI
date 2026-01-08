@@ -594,6 +594,81 @@ export class ApiClient {
       method: 'POST',
     });
   }
+
+  // ─────────────────── Prompts API (v2.4.0) ───────────────────
+
+  /**
+   * GET /api/prompts - получить все промпты
+   */
+  async getPrompts(): Promise<import('../types').PromptsConfigResponse> {
+    return this.request<import('../types').PromptsConfigResponse>('/api/prompts');
+  }
+
+  /**
+   * PUT /api/prompts - обновить все промпты
+   */
+  async updatePrompts(prompts: import('../types').PromptsConfig): Promise<import('../types').PromptsConfigResponse> {
+    return this.request<import('../types').PromptsConfigResponse>('/api/prompts', {
+      method: 'PUT',
+      body: JSON.stringify(prompts),
+    });
+  }
+
+  /**
+   * GET /api/prompts/{category} - получить промпты категории
+   */
+  async getPromptsCategory(category: 'naturalQuery' | 'rag' | 'vectorOperations' | 'l1l2Templates'): Promise<import('../types').PromptCategoryResponse> {
+    return this.request<import('../types').PromptCategoryResponse>(`/api/prompts/${category}`);
+  }
+
+  /**
+   * PATCH /api/prompts/{category} - частично обновить промпты категории
+   */
+  async patchPromptsCategory(
+    category: 'naturalQuery' | 'rag' | 'vectorOperations' | 'l1l2Templates',
+    data: Partial<import('../types').NaturalQueryPrompts | import('../types').RagPrompts | import('../types').VectorOperationsPrompts>
+  ): Promise<import('../types').PromptCategoryResponse> {
+    return this.request<import('../types').PromptCategoryResponse>(`/api/prompts/${category}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * POST /api/prompts/reload - перезагрузить из файла
+   */
+  async reloadPrompts(): Promise<import('../types').PromptsConfigResponse> {
+    return this.request<import('../types').PromptsConfigResponse>('/api/prompts/reload', {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * POST /api/prompts/validate - валидировать без сохранения
+   */
+  async validatePrompts(prompts: import('../types').PromptsConfig): Promise<{ success: boolean; valid: boolean; errors?: Array<{ path: string; message: string }> }> {
+    return this.request<{ success: boolean; valid: boolean; errors?: Array<{ path: string; message: string }> }>('/api/prompts/validate', {
+      method: 'POST',
+      body: JSON.stringify(prompts),
+    });
+  }
+
+  /**
+   * GET /api/prompts/export - экспорт промптов
+   */
+  async exportPrompts(format: 'json' | 'yaml' = 'json'): Promise<import('../types').PromptsConfig | string> {
+    return this.request<import('../types').PromptsConfig | string>(`/api/prompts/export?format=${format}`);
+  }
+
+  /**
+   * POST /api/prompts/import - импорт промптов
+   */
+  async importPrompts(prompts: import('../types').PromptsConfig): Promise<import('../types').PromptsConfigResponse> {
+    return this.request<import('../types').PromptsConfigResponse>('/api/prompts/import', {
+      method: 'POST',
+      body: JSON.stringify(prompts),
+    });
+  }
 }
 
 // Create default API client instance

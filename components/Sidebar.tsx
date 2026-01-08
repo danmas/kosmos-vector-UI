@@ -5,6 +5,7 @@ interface SidebarProps {
   currentView: AppView;
   onChangeView: (view: AppView) => void;
   onOpenLogsDialog: () => void;
+  onOpenPromptsEditor?: () => void;
   contextCode: string;
   setContextCode: (code: string) => void;
   availableContextCodes: string[];
@@ -16,7 +17,8 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ 
   currentView, 
   onChangeView, 
-  onOpenLogsDialog, 
+  onOpenLogsDialog,
+  onOpenPromptsEditor,
   contextCode, 
   setContextCode,
   availableContextCodes,
@@ -113,7 +115,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </ul>
         
-        <div className="mt-2 pt-2 border-t border-slate-800">
+        <div className="mt-2 pt-2 border-t border-slate-800 space-y-1">
              <button
                 onClick={onOpenLogsDialog}
                 className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors text-slate-500 hover:bg-slate-800 hover:text-slate-300"
@@ -121,6 +123,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <span className="text-sm">📟</span>
                 <span className="font-medium text-xs">Server Logs</span>
               </button>
+              {onOpenPromptsEditor && (
+                <button
+                  onClick={onOpenPromptsEditor}
+                  className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+                >
+                  <span className="text-sm">✏️</span>
+                  <span className="font-medium text-xs">Prompts Editor</span>
+                </button>
+              )}
         </div>
       </nav>
     </aside>

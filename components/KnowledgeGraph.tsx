@@ -359,10 +359,15 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         return graphRegex.test(node.id);
       }
 
+      // Если есть явно установленный фильтр filteredItemIds (например, Alt+клик)
+      if (filteredItemIds.size > 0) {
+        return filteredItemIds.has(node.id);
+      }
+
       // Если поиска в графе нет, но есть фильтр в Инспекторе
       if (inspectorSearch.trim()) {
-        // Проверяем по ID (Set из Инспектора илиRegex)
-        return filteredItemIds.has(node.id) || (inspectorRegex && inspectorRegex.test(node.id));
+        // Проверяем по Regex
+        return inspectorRegex && inspectorRegex.test(node.id);
       }
 
       // Если фильтров нет вообще - показываем всё

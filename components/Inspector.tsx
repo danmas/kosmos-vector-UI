@@ -5,6 +5,7 @@ import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
 import NaturalQueryDialog from './NaturalQueryDialog';
+import TagsDialog from './TagsDialog';
 
 interface InspectorProps {
   // Props are now optional since we fetch data internally
@@ -37,12 +38,17 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [dataSource, setDataSource] = useState<'cache' | 'server' | null>(null);
   const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
 
+  const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
+  const [itemTags, setItemTags] = useState<import('../types').Tag[]>([]);
+  const [loadingTags, setLoadingTags] = useState(false);
+
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
   
   // Ref для отслеживания контекста, с которым был выбран элемент
   const selectedIdContextRef = useRef<string | null>(null);
 
+  
   // Отладка изменения поиска
   useEffect(() => {
     console.log('[Inspector] inspectorSearch changed to:', inspectorSearch);
@@ -112,6 +118,32 @@ const Inspector: React.FC<InspectorProps> = () => {
     loadItemsList();
   }, [currentContextCode, getItemsList, setCachedItemsList]);
 
+  // Функция загрузки тегов элемента
+  const loadItemTags = async (itemId: string) => {
+    if (!itemId || itemId.trim() === '') {
+      setItemTags([]);
+      return;
+    }
+
+    setLoadingTags(true);
+    try {
+      const tagsRes = await apiClient.getItemTags(itemId);
+      if (tagsRes.success) {
+        setItemTags(tagsRes.tags || []);
+      }
+    } catch (err: any) {
+      // 404 - это нормально, если у AI Item еще нет тегов
+      if (err.status === 404) {
+        setItemTags([]);
+      } else {
+        console.error('Failed to load item tags:', err);
+        setItemTags([]);
+      }
+    } finally {
+      setLoadingTags(false);
+    }
+  };
+
   // Функция загрузки полных данных элемента
   const loadFullItemData = async (itemId: string) => {
     setLoadingFullData(true);
@@ -126,12 +158,34 @@ const Inspector: React.FC<InspectorProps> = () => {
     }
   };
 
+  // // Загрузка полных данных при выборе элемента
+  // useEffect(() => {
+  //   // Проверяем, что элемент существует в текущем списке (принадлежит текущему контексту)
+  //   // И что контекст не изменился с момента выбора элемента
+  //   if (selectedId && itemsList.length > 0) {
+  //     // Проверяем, что контекст совпадает с тем, при котором был выбран элемент
+  //     if (selectedIdContextRef.current !== currentContextCode) {
+  //       console.log(`[Inspector] Context mismatch: selectedId from "${selectedIdContextRef.current}", current is "${currentContextCode}", skipping load`);
+  //       return;
+  //     }
+      
+  //     const existsInCurrentContext = itemsList.some(item => item.id === selectedId);
+  //     if (existsInCurrentContext) {
+  //       loadFullItemData(selectedId);
+  //     } else {
+  //       // Элемент из другого контекста — сбрасываем выбор
+  //       console.log(`[Inspector] Selected item "${selectedId}" not found in current context, resetting...`);
+  //       setSelectedId(null);
+  //       setFullItemData(null);
+  //     }
+  //   } else if (!selectedId) {
+  //     setFullItemData(null);
+  //   }
+  // }, [selectedId, itemsList, currentContextCode]);
+
   // Загрузка полных данных при выборе элемента
   useEffect(() => {
-    // Проверяем, что элемент существует в текущем списке (принадлежит текущему контексту)
-    // И что контекст не изменился с момента выбора элемента
     if (selectedId && itemsList.length > 0) {
-      // Проверяем, что контекст совпадает с тем, при котором был выбран элемент
       if (selectedIdContextRef.current !== currentContextCode) {
         console.log(`[Inspector] Context mismatch: selectedId from "${selectedIdContextRef.current}", current is "${currentContextCode}", skipping load`);
         return;
@@ -140,16 +194,19 @@ const Inspector: React.FC<InspectorProps> = () => {
       const existsInCurrentContext = itemsList.some(item => item.id === selectedId);
       if (existsInCurrentContext) {
         loadFullItemData(selectedId);
+        loadItemTags(selectedId); // ← Добавить эту строку
       } else {
-        // Элемент из другого контекста — сбрасываем выбор
         console.log(`[Inspector] Selected item "${selectedId}" not found in current context, resetting...`);
         setSelectedId(null);
         setFullItemData(null);
+        setItemTags([]); // ← Добавить эту строку
       }
     } else if (!selectedId) {
       setFullItemData(null);
+      setItemTags([]); // ← Добавить эту строку
     }
   }, [selectedId, itemsList, currentContextCode]);
+  
 
   // Мемоизируем filteredItems чтобы избежать пересоздания на каждый рендер
   // Поддержка regex: если поиск обёрнут в /.../ — используется регулярное выражение
@@ -370,17 +427,42 @@ const Inspector: React.FC<InspectorProps> = () => {
             {/* Header */}
             <div className="p-3 border-b border-slate-700 bg-slate-800">
               <div className="flex justify-between items-start">
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h1 className="text-lg font-bold text-white font-mono">{fullItemData.id}</h1>
                     <span className={`text-xs px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider ${getBadgeColor(fullItemData.type)}`}>
                       {fullItemData.type}
                     </span>
+                    <button
+                      onClick={() => setIsTagsDialogOpen(true)}
+                      className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-2 py-0.5 rounded transition-colors font-bold"
+                      title="Управление тегами"
+                    >
+                      T
+                    </button>
                   </div>
-                  <div className="flex gap-3 text-xs text-slate-400">
+                  <div className="flex gap-3 text-xs text-slate-400 mb-2">
                     <span className="flex items-center gap-1">📄 {fullItemData.filePath}</span>
                     <span className="flex items-center gap-1">🌐 {fullItemData.language}</span>
                   </div>
+                  {/* Теги */}
+                  {loadingTags ? (
+                    <div className="text-[10px] text-slate-500">Загрузка тегов...</div>
+                  ) : itemTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {itemTags.map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/50 rounded text-[10px] font-mono"
+                          title={tag.description || undefined}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-500 italic">Теги отсутствуют</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -422,6 +504,17 @@ const Inspector: React.FC<InspectorProps> = () => {
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
         onApplyResult={(res) => setInspectorSearch(res)}
+      />
+      <TagsDialog
+        isOpen={isTagsDialogOpen && !!selectedId}
+        onClose={() => {
+          setIsTagsDialogOpen(false);
+          // Перезагружаем теги после закрытия диалога
+          if (selectedId) {
+            loadItemTags(selectedId);
+          }
+        }}
+        itemId={selectedId || ''}
       />
     </div>
   );

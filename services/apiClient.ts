@@ -319,6 +319,9 @@ export class ApiClient {
         'NETWORK_ERROR'
       );
     }
+
+
+    
   }
 
   // GET /api/items - получение всех AiItem
@@ -593,6 +596,8 @@ export class ApiClient {
     return this.request<import('../types').NaturalQueryResponse>(`/api/agent-scripts/${id}/execute`, {
       method: 'POST',
     });
+
+    
   }
 
   // ─────────────────── Prompts API (v2.4.0) ───────────────────
@@ -651,6 +656,10 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(prompts),
     });
+
+
+    
+    
   }
 
   /**
@@ -669,6 +678,43 @@ export class ApiClient {
       body: JSON.stringify(prompts),
     });
   }
+
+  // ─────────────────── Tags API ───────────────────
+
+  /**
+   * GET /api/tags - получить все теги
+   */
+  async getTags(): Promise<import('../types').TagsListResponse> {
+    return this.request<import('../types').TagsListResponse>('/api/tags');
+  }
+
+  /**
+   * POST /api/tags - создать новый тег
+   */
+  async createTag(data: { code: string; name: string; description?: string }): Promise<import('../types').TagResponse> {
+    return this.request<import('../types').TagResponse>('/api/tags', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * GET /api/items/{id}/tags - получить теги AI Item
+   */
+  async getItemTags(itemId: string): Promise<import('../types').ItemTagsResponse> {
+    return this.request<import('../types').ItemTagsResponse>(`/api/items/${encodeURIComponent(itemId)}/tags`);
+  }
+
+  /**
+   * PUT /api/items/{id}/tags - синхронизировать теги AI Item (заменить все)
+   */
+  async syncItemTags(itemId: string, tagCodes: string[]): Promise<import('../types').ItemTagsResponse> {
+    return this.request<import('../types').ItemTagsResponse>(`/api/items/${encodeURIComponent(itemId)}/tags`, {
+      method: 'PUT',
+      body: JSON.stringify({ tagCodes }),
+    });
+  }
+
 }
 
 // Create default API client instance

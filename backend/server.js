@@ -886,6 +886,173 @@ app.get('/api/items-list', (req, res) => {
   res.json(itemsList);
 });
 
+// ─────────────────── Tags API (must be before /api/items/:id) ───────────────────
+
+// In-memory storage for tags (keyed by context-code)
+const tagsStorage = {}; // { contextCode: { tags: Map<code, Tag>, itemTags: Map<itemId, Set<tagCode>> } }
+
+function getTagsStorage(contextCode) {
+  if (!tagsStorage[contextCode]) {
+    tagsStorage[contextCode] = {
+      tags: new Map(), // code -> Tag
+      itemTags: new Map() // itemId -> Set<tagCode>
+    };
+  }
+  return tagsStorage[contextCode];
+}
+
+// GET /api/tags - получить все теги
+app.get('/api/tags', (req, res) => {
+  try {
+    const contextCode = req.query['context-code'] || 'default';
+    console.log(`[Tags API] GET /api/tags for context: ${contextCode}`);
+
+    const storage = getTagsStorage(contextCode);
+    const tags = Array.from(storage.tags.values());
+
+    res.json({
+      success: true,
+      tags: tags
+    });
+  } catch (error) {
+    console.error('[Tags API] Failed to get tags:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve tags: ' + error.message
+    });
+  }
+});
+
+// POST /api/tags - создать новый тег
+app.post('/api/tags', (req, res) => {
+  try {
+    const contextCode = req.query['context-code'] || 'default';
+    console.log(`[Tags API] POST /api/tags for context: ${contextCode}`);
+
+    const { code, name, description } = req.body;
+
+    if (!code || !name) {
+      return res.status(400).json({
+        success: false,
+        error: 'code and name are required'
+      });
+    }
+
+    const storage = getTagsStorage(contextCode);
+
+    // Проверяем, существует ли тег с таким кодом
+    if (storage.tags.has(code)) {
+      return res.status(409).json({
+        success: false,
+        error: `Tag with code '${code}' already exists`
+      });
+    }
+
+    // Создаем новый тег
+    const tag = {
+      id: Date.now(), // Простой ID на основе timestamp
+      code: code.trim(),
+      name: name.trim(),
+      description: description ? description.trim() : null,
+      created_at: new Date().toISOString(),
+      updated_at: null
+    };
+
+    storage.tags.set(code, tag);
+
+    console.log(`[Tags API] Created tag: ${code} (${name})`);
+
+    res.json({
+      success: true,
+      tag: tag
+    });
+  } catch (error) {
+    console.error('[Tags API] Failed to create tag:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create tag: ' + error.message
+    });
+  }
+});
+
+// GET /api/items/:id/tags - получить теги AI Item (MUST be before /api/items/:id)
+app.get('/api/items/:id/tags', (req, res) => {
+  try {
+    const contextCode = req.query['context-code'] || 'default';
+    const itemId = decodeURIComponent(req.params.id);
+    console.log(`[Tags API] GET /api/items/${itemId}/tags for context: ${contextCode}`);
+
+    const storage = getTagsStorage(contextCode);
+    const itemTagCodes = storage.itemTags.get(itemId) || new Set();
+    const tags = Array.from(itemTagCodes)
+      .map(code => storage.tags.get(code))
+      .filter(tag => tag !== undefined);
+
+    res.json({
+      success: true,
+      itemId: itemId,
+      tags: tags
+    });
+  } catch (error) {
+    console.error('[Tags API] Failed to get item tags:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve item tags: ' + error.message
+    });
+  }
+});
+
+// PUT /api/items/:id/tags - синхронизировать теги AI Item (заменить все) (MUST be before /api/items/:id)
+app.put('/api/items/:id/tags', (req, res) => {
+  try {
+    const contextCode = req.query['context-code'] || 'default';
+    const itemId = decodeURIComponent(req.params.id);
+    console.log(`[Tags API] PUT /api/items/${itemId}/tags for context: ${contextCode}`);
+
+    const { tagCodes } = req.body;
+
+    if (!Array.isArray(tagCodes)) {
+      return res.status(400).json({
+        success: false,
+        error: 'tagCodes must be an array'
+      });
+    }
+
+    const storage = getTagsStorage(contextCode);
+
+    // Проверяем, что все теги существуют
+    const invalidCodes = tagCodes.filter(code => !storage.tags.has(code));
+    if (invalidCodes.length > 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Tags not found: ${invalidCodes.join(', ')}`
+      });
+    }
+
+    // Заменяем все теги для этого item
+    storage.itemTags.set(itemId, new Set(tagCodes));
+
+    // Получаем обновленный список тегов
+    const tags = Array.from(tagCodes)
+      .map(code => storage.tags.get(code))
+      .filter(tag => tag !== undefined);
+
+    console.log(`[Tags API] Synced tags for item ${itemId}: ${tagCodes.length} tags`);
+
+    res.json({
+      success: true,
+      itemId: itemId,
+      tags: tags
+    });
+  } catch (error) {
+    console.error('[Tags API] Failed to sync item tags:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync item tags: ' + error.message
+    });
+  }
+});
+
 // GET /api/items/:id - получение конкретного AiItem
 app.get('/api/items/:id', (req, res) => {
   const { id } = req.params;

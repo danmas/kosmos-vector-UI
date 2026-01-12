@@ -334,3 +334,30 @@ export interface PromptCategoryResponse {
   category: string;
   data: any;
 }
+
+// ────────────────────────────────────── Tags Types (v2.5.0)
+
+export interface Tag {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface TagsListResponse {
+  success: boolean;
+  tags: Tag[];
+}
+
+export interface TagResponse {
+  success: boolean;
+  tag: Tag;
+}
+
+export interface ItemTagsResponse {
+  success: boolean;
+  itemId: string;
+  tags: Tag[];
+}

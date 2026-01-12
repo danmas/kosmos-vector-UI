@@ -75,6 +75,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [loadingModalData, setLoadingModalData] = useState(false);
   const [modalActiveTab, setModalActiveTab] = useState<'L0' | 'L1' | 'L2'>('L1');
 
+  // Состояние для persistent tooltip (остаётся на экране до закрытия)
+  const [tooltip, setTooltip] = useState<{
+    node: { id: string; type: string; language: string; l2_desc?: string };
+    x: number;
+    y: number;
+  } | null>(null);
+
   // Функция открытия модального окна с деталями узла
   const openNodeModal = async (nodeId: string) => {
     setModalNodeId(nodeId);
@@ -588,8 +595,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .style("pointer-events", "none")
       .style("text-shadow", "2px 2px 4px #000");
 
-    // Tooltip area (simple title for native tooltip)
-    node.append("title").text(d => `ID: ${d.id}\nType: ${d.type}\nLang: ${d.language}\nDesc: ${d.l2_desc}`);
+    // Persistent tooltip - показывается при наведении, остаётся на экране до закрытия
+    node.on("mouseenter", (event: any, d: any) => {
+      // Получаем позицию относительно SVG контейнера
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      if (svgRect) {
+        setTooltip({
+          node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
+          x: event.clientX - svgRect.left + 20,
+          y: event.clientY - svgRect.top - 10
+        });
+      }
+    });
 
     // Setup zoom and pan
     const zoom = d3.zoom<SVGSVGElement, unknown>()
@@ -862,6 +879,41 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         {/* Graph area */}
         <div className="flex-1 bg-slate-900 overflow-hidden relative">
           <svg ref={svgRef} className="w-full h-full cursor-move"></svg>
+          
+          {/* Persistent Tooltip - остаётся на экране до закрытия */}
+          {tooltip && (
+            <div
+              className="absolute bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-2xl z-50 min-w-[200px] max-w-[350px]"
+              style={{ left: tooltip.x, top: tooltip.y }}
+            >
+              <button
+                onClick={() => setTooltip(null)}
+                className="absolute top-1 right-1 text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
+              >
+                ✕
+              </button>
+              <div className="text-xs space-y-1.5 pr-5">
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-500 shrink-0">ID:</span>
+                  <span className="text-white font-mono break-all">{tooltip.node.id}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Type:</span>
+                  <span className="text-blue-400">{tooltip.node.type}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Lang:</span>
+                  <span className="text-green-400">{tooltip.node.language}</span>
+                </div>
+                {tooltip.node.l2_desc && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-500 shrink-0">Desc:</span>
+                    <span className="text-slate-300">{tooltip.node.l2_desc}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right panel - Session History */}

@@ -11,6 +11,11 @@ interface KnowledgeGraphProps {
   // Props are now optional since we fetch data internally
 }
 
+// ============ НАСТРОЙКИ ГРАФА ============
+const GRAPH_SETTINGS = {
+  /** Задержка появления tooltip при наведении на узел (мс) */
+  TOOLTIP_DELAY_MS: 1000,
+};
 
 // Функция для форматирования времени с начала загрузки страницы
 let pageLoadTime = performance.now();
@@ -58,6 +63,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
   const { getGraph, setGraph, currentContextCode } = useDataCache();
   const svgRef = useRef<SVGSVGElement>(null);
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -595,18 +601,35 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .style("pointer-events", "none")
       .style("text-shadow", "2px 2px 4px #000");
 
-    // Persistent tooltip - показывается при наведении, остаётся на экране до закрытия
-    node.on("mouseenter", (event: any, d: any) => {
-      // Получаем позицию относительно SVG контейнера
-      const svgRect = svgRef.current?.getBoundingClientRect();
-      if (svgRect) {
-        setTooltip({
-          node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
-          x: event.clientX - svgRect.left + 20,
-          y: event.clientY - svgRect.top - 10
-        });
-      }
-    });
+    // Persistent tooltip - показывается после удержания курсора, остаётся на экране до закрытия
+    node
+      .on("mouseenter", (event: any, d: any) => {
+        // Очищаем предыдущий timeout если есть
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+        }
+        // Запоминаем позицию курсора в момент наведения
+        const clientX = event.clientX;
+        const clientY = event.clientY;
+        // Запускаем таймер на появление tooltip
+        tooltipTimeoutRef.current = setTimeout(() => {
+          const svgRect = svgRef.current?.getBoundingClientRect();
+          if (svgRect) {
+            setTooltip({
+              node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
+              x: clientX - svgRect.left + 20,
+              y: clientY - svgRect.top - 10
+            });
+          }
+        }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
+      })
+      .on("mouseleave", () => {
+        // Очищаем timeout при уходе курсора — tooltip не появится если ушли раньше
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+          tooltipTimeoutRef.current = null;
+        }
+      });
 
     // Setup zoom and pan
     const zoom = d3.zoom<SVGSVGElement, unknown>()

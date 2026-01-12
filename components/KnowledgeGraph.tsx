@@ -909,13 +909,27 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               className="absolute bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-2xl z-50 min-w-[200px] max-w-[350px]"
               style={{ left: tooltip.x, top: tooltip.y }}
             >
-              <button
-                onClick={() => setTooltip(null)}
-                className="absolute top-1 right-1 text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
-              >
-                ✕
-              </button>
-              <div className="text-xs space-y-1.5 pr-5">
+              {/* Кнопки в правом верхнем углу */}
+              <div className="absolute top-1 right-1 flex items-center gap-0.5">
+                <button
+                  onClick={() => {
+                    openNodeModal(tooltip.node.id);
+                    setTooltip(null);
+                  }}
+                  className="text-slate-400 hover:text-blue-400 text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
+                  title="Открыть карточку"
+                >
+                  ⋯
+                </button>
+                <button
+                  onClick={() => setTooltip(null)}
+                  className="text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
+                  title="Закрыть"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="text-xs space-y-1.5 pr-12">
                 <div className="flex items-start gap-2">
                   <span className="text-slate-500 shrink-0">ID:</span>
                   <span className="text-white font-mono break-all">{tooltip.node.id}</span>

@@ -6,6 +6,7 @@ import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
 import NaturalQueryDialog from './NaturalQueryDialog';
+import TagsDialog from './TagsDialog';
 
 interface KnowledgeGraphProps {
   // Props are now optional since we fetch data internally
@@ -80,6 +81,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [modalItemData, setModalItemData] = useState<AiItem | null>(null);
   const [loadingModalData, setLoadingModalData] = useState(false);
   const [modalActiveTab, setModalActiveTab] = useState<'L0' | 'L1' | 'L2'>('L1');
+  
+  const [modalItemTags, setModalItemTags] = useState<import('../types').Tag[]>([]);
+  const [loadingModalTags, setLoadingModalTags] = useState(false);
+  const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
 
   // Состояние для persistent tooltip (остаётся на экране до закрытия)
   const [tooltip, setTooltip] = useState<{
@@ -96,10 +101,35 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     try {
       const fullData = await apiClient.getItem(nodeId);
       setModalItemData(fullData);
+      loadModalItemTags(nodeId);
     } catch (err) {
       console.error('Failed to load node details:', err);
     } finally {
       setLoadingModalData(false);
+    }
+  };
+
+  // Функция загрузки тегов для модального окна
+  const loadModalItemTags = async (itemId: string) => {
+    if (!itemId) {
+      setModalItemTags([]);
+      return;
+    }
+    setLoadingModalTags(true);
+    try {
+      const tagsRes = await apiClient.getItemTags(itemId);
+      if (tagsRes.success) {
+        setModalItemTags(tagsRes.tags || []);
+      }
+    } catch (err: any) {
+      if (err.status === 404) {
+        setModalItemTags([]);
+      } else {
+        console.error('Failed to load modal item tags:', err);
+        setModalItemTags([]);
+      }
+    } finally {
+      setLoadingModalTags(false);
     }
   };
 
@@ -1028,8 +1058,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
+            {/* Modal Header */}
             <div className="p-3 border-b border-slate-700 flex justify-between items-start">
-              <div>
+              <div className="flex-1">
                 {modalItemData ? (
                   <>
                     <div className="flex items-center gap-2 mb-1">
@@ -1037,11 +1068,36 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                       <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-blue-900/30 border-blue-700/30 text-blue-400">
                         {modalItemData.type}
                       </span>
+                      <button
+                        onClick={() => setIsTagsDialogOpen(true)}
+                        className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-2 py-0.5 rounded transition-colors font-bold"
+                        title="Управление тегами"
+                      >
+                        T
+                      </button>
                     </div>
-                    <div className="flex gap-3 text-[10px] text-slate-400">
+                    <div className="flex gap-3 text-[10px] text-slate-400 mb-2">
                       <span>📄 {modalItemData.filePath}</span>
                       <span>🌐 {modalItemData.language}</span>
                     </div>
+                    {/* Теги */}
+                    {loadingModalTags ? (
+                      <div className="text-[10px] text-slate-500">Загрузка тегов...</div>
+                    ) : modalItemTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {modalItemTags.map(tag => (
+                          <span
+                            key={tag.id}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/50 rounded text-[10px] font-mono"
+                            title={tag.description || undefined}
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-500 italic">Теги отсутствуют</div>
+                    )}
                   </>
                 ) : (
                   <h2 className="text-base font-bold text-white font-mono">{modalNodeId}</h2>
@@ -1096,6 +1152,17 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
         onApplyResult={(res) => setGraphSearch(res)}
+      />
+      <TagsDialog
+        isOpen={isTagsDialogOpen && !!modalNodeId}
+        onClose={() => {
+          setIsTagsDialogOpen(false);
+          // Перезагружаем теги после закрытия диалога
+          if (modalNodeId) {
+            loadModalItemTags(modalNodeId);
+          }
+        }}
+        itemId={modalNodeId || ''}
       />
     </div>
   );

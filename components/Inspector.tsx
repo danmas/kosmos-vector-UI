@@ -144,6 +144,24 @@ const Inspector: React.FC<InspectorProps> = () => {
     }
   };
 
+  // Функция локального обновления тегов в списке
+  const updateItemTagsInList = (itemId: string, newTags: import('../types').TagSummary[]) => {
+    setItemsList(prevList => 
+      prevList.map(item => 
+        item.id === itemId 
+          ? { ...item, tags: newTags }
+          : item
+      )
+    );
+    // Также обновляем кэш
+    const updatedList = itemsList.map(item => 
+      item.id === itemId 
+        ? { ...item, tags: newTags }
+        : item
+    );
+    setCachedItemsList(updatedList, isDemoMode);
+  };
+
   // Функция загрузки полных данных элемента
   const loadFullItemData = async (itemId: string) => {
     setLoadingFullData(true);
@@ -405,12 +423,34 @@ const Inspector: React.FC<InspectorProps> = () => {
                 </span>
                 <span className="text-[10px] uppercase text-slate-500">{item.language}</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getBadgeColor(item.type)}`}>
                   {item.type}
                 </span>
-                <span className="text-xs text-slate-500 truncate">{item.filePath}</span>
+                {/* Теги из списка */}
+                {item.tags && item.tags.length > 0 && item.tags.map(tag => (
+                  <span
+                    key={tag.id}
+                    className="text-[9px] px-1 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded"
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+                {/* Кнопка T для открытия диалога тегов */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selectedIdContextRef.current = currentContextCode;
+                    setSelectedId(item.id);
+                    setIsTagsDialogOpen(true);
+                  }}
+                  className="text-[9px] bg-purple-600/80 hover:bg-purple-500 text-white px-1.5 py-0.5 rounded transition-colors font-bold ml-auto"
+                  title="Управление тегами"
+                >
+                  T
+                </button>
               </div>
+
             </div>
           ))}
         </div>
@@ -515,6 +555,7 @@ const Inspector: React.FC<InspectorProps> = () => {
           }
         }}
         itemId={selectedId || ''}
+        onTagsSaved={updateItemTagsInList}
       />
     </div>
   );

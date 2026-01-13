@@ -7,9 +7,10 @@ interface TagsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   itemId: string;
+  onTagsSaved?: (itemId: string, tags: import('../types').TagSummary[]) => void; // Новый callback
 }
 
-const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId }) => {
+const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTagsSaved }) => {
   const { currentContextCode } = useDataCache();
   const [itemTags, setItemTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -83,6 +84,16 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId }) => {
       const res = await apiClient.syncItemTags(itemId, selectedTagCodes);
       if (res.success) {
         setItemTags(res.tags || []);
+        // Вызываем callback с обновлёнными тегами
+        if (onTagsSaved) {
+          const tagSummaries = (res.tags || []).map(t => ({
+            id: t.id,
+            code: t.code,
+            name: t.name
+          }));
+          onTagsSaved(itemId, tagSummaries);
+        }
+
         // Обновляем список всех тегов на случай, если были созданы новые
         const allTagsRes = await apiClient.getTags();
         if (allTagsRes.success) {
@@ -343,11 +354,10 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId }) => {
                       return (
                         <label
                           key={tag.id}
-                          className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                            isSelected
+                          className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${isSelected
                               ? 'bg-purple-500/20 border-purple-500/50'
                               : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800/60'
-                          }`}
+                            }`}
                         >
                           <input
                             type="checkbox"

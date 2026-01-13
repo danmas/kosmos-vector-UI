@@ -32,6 +32,7 @@ export interface AiItemSummary {
   type: AiItemType;
   language: Language;
   filePath: string;
+  tags?: TagSummary[]; // Теги элемента (опционально)
 }
 
 export interface FileNode {
@@ -344,6 +345,13 @@ export interface Tag {
   description: string | null;
   created_at: string;
   updated_at: string | null;
+}
+
+// Упрощённая версия тега для списков
+export interface TagSummary {
+  id: number;
+  code: string;
+  name: string;
 }
 
 export interface TagsListResponse {

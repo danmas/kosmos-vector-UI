@@ -149,20 +149,29 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Функция локального обновления тегов в списке
   const updateItemTagsInList = (itemId: string, newTags: import('../types').TagSummary[]) => {
-    setItemsList(prevList => 
-      prevList.map(item => 
+    setItemsList(prevList => {
+      const updatedList = prevList.map(item => 
         item.id === itemId 
           ? { ...item, tags: newTags }
           : item
-      )
-    );
-    // Также обновляем кэш
-    const updatedList = itemsList.map(item => 
-      item.id === itemId 
-        ? { ...item, tags: newTags }
-        : item
-    );
-    setCachedItemsList(updatedList, isDemoMode);
+      );
+      // Обновляем кэш с актуальным списком
+      setCachedItemsList(updatedList, isDemoMode);
+      return updatedList;
+    });
+  };
+
+  // Функция массового обновления тегов в списке
+  const updateMultipleItemsTags = (updates: Map<string, import('../types').TagSummary[]>) => {
+    setItemsList(prevList => {
+      const updatedList = prevList.map(item => {
+        const newTags = updates.get(item.id);
+        return newTags !== undefined ? { ...item, tags: newTags } : item;
+      });
+      // Обновляем кэш один раз с полностью актуальным списком
+      setCachedItemsList(updatedList, isDemoMode);
+      return updatedList;
+    });
   };
 
   // Функция загрузки полных данных элемента
@@ -206,6 +215,11 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Загрузка полных данных при выборе элемента
   useEffect(() => {
+    // Пропускаем проверку для специальных ID массовых операций
+    if (selectedId === 'bulk-add' || selectedId === 'bulk-remove') {
+      return;
+    }
+
     if (selectedId && itemsList.length > 0) {
       if (selectedIdContextRef.current !== currentContextCode) {
         console.log(`[Inspector] Context mismatch: selectedId from "${selectedIdContextRef.current}", current is "${currentContextCode}", skipping load`);
@@ -215,16 +229,16 @@ const Inspector: React.FC<InspectorProps> = () => {
       const existsInCurrentContext = itemsList.some(item => item.id === selectedId);
       if (existsInCurrentContext) {
         loadFullItemData(selectedId);
-        loadItemTags(selectedId); // ← Добавить эту строку
+        loadItemTags(selectedId);
       } else {
         console.log(`[Inspector] Selected item "${selectedId}" not found in current context, resetting...`);
         setSelectedId(null);
         setFullItemData(null);
-        setItemTags([]); // ← Добавить эту строку
+        setItemTags([]);
       }
     } else if (!selectedId) {
       setFullItemData(null);
-      setItemTags([]); // ← Добавить эту строку
+      setItemTags([]);
     }
   }, [selectedId, itemsList, currentContextCode]);
   
@@ -436,6 +450,28 @@ const Inspector: React.FC<InspectorProps> = () => {
               </svg>
               Filter
             </button>
+            <button
+              onClick={() => {
+                setIsTagsDialogOpen(true);
+                setSelectedId('bulk-add'); // Специальный ID для режима массового добавления
+              }}
+              disabled={filteredItems.length === 0}
+              className="bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+              title={`Добавить теги ко всем отфильтрованным элементам (${filteredItems.length})`}
+            >
+              T+
+            </button>
+            <button
+              onClick={() => {
+                setIsTagsDialogOpen(true);
+                setSelectedId('bulk-remove'); // Специальный ID для режима массового удаления
+              }}
+              disabled={filteredItems.length === 0}
+              className="bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+              title={`Удалить теги у всех отфильтрованных элементов (${filteredItems.length})`}
+            >
+              T-
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -582,12 +618,41 @@ const Inspector: React.FC<InspectorProps> = () => {
         onClose={() => {
           setIsTagsDialogOpen(false);
           // Перезагружаем теги после закрытия диалога
-          if (selectedId) {
+          if (selectedId && selectedId !== 'bulk-add' && selectedId !== 'bulk-remove') {
             loadItemTags(selectedId);
           }
         }}
         itemId={selectedId || ''}
+        filteredItems={selectedId === 'bulk-add' || selectedId === 'bulk-remove' ? filteredItems : undefined}
+        bulkMode={selectedId === 'bulk-add' ? 'add' : selectedId === 'bulk-remove' ? 'remove' : undefined}
         onTagsSaved={updateItemTagsInList}
+        onBulkTagsApplied={async (affectedItemIds, operation) => {
+          // Загружаем теги для всех затронутых элементов параллельно
+          const updates = new Map<string, import('../types').TagSummary[]>();
+          
+          await Promise.all(
+            affectedItemIds.map(async (itemId) => {
+              try {
+                const tagsRes = await apiClient.getItemTags(itemId);
+                if (tagsRes.success) {
+                  const tagSummaries = (tagsRes.tags || []).map(t => ({
+                    id: t.id,
+                    code: t.code,
+                    name: t.name
+                  }));
+                  updates.set(itemId, tagSummaries);
+                }
+              } catch (err) {
+                console.error(`Failed to reload tags for ${itemId}:`, err);
+              }
+            })
+          );
+          
+          // Обновляем все элементы одним batch-обновлением
+          if (updates.size > 0) {
+            updateMultipleItemsTags(updates);
+          }
+        }}
       />
     </div>
   );

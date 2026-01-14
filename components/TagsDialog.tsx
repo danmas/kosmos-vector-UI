@@ -7,10 +7,21 @@ interface TagsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   itemId: string;
-  onTagsSaved?: (itemId: string, tags: import('../types').TagSummary[]) => void; // Новый callback
+  filteredItems?: import('../types').AiItemSummary[]; // Для массовых операций
+  bulkMode?: 'add' | 'remove'; // Режим массовых операций
+  onTagsSaved?: (itemId: string, tags: import('../types').TagSummary[]) => void;
+  onBulkTagsApplied?: (affectedItemIds: string[], operation: 'add' | 'remove') => void; // Новый callback
 }
 
-const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTagsSaved }) => {
+const TagsDialog: React.FC<TagsDialogProps> = ({ 
+  isOpen, 
+  onClose, 
+  itemId, 
+  filteredItems,
+  bulkMode,
+  onTagsSaved,
+  onBulkTagsApplied 
+}) => {
   const { currentContextCode } = useDataCache();
   const [itemTags, setItemTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -22,6 +33,10 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
   const [newTagName, setNewTagName] = useState('');
   const [newTagDescription, setNewTagDescription] = useState('');
   const [creatingTag, setCreatingTag] = useState(false);
+
+  // Определяем режим массовых операций
+  const isBulkMode = bulkMode === 'add' || bulkMode === 'remove';
+  const bulkItemIds = filteredItems?.map(item => item.id) || [];
 
   // Position and Size state
   const [position, setPosition] = useState({ x: window.innerWidth - 530, y: 64 });
@@ -35,20 +50,26 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
 
   // Загрузка тегов при открытии
   useEffect(() => {
-    if (isOpen && itemId && currentContextCode) {
+    if (isOpen && currentContextCode) {
       loadData();
     }
-  }, [isOpen, itemId, currentContextCode]);
+  }, [isOpen, itemId, currentContextCode, isBulkMode]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Загружаем теги AI Item
-      const itemTagsRes = await apiClient.getItemTags(itemId);
-      if (itemTagsRes.success) {
-        setItemTags(itemTagsRes.tags || []);
-        setSelectedTagCodes(itemTagsRes.tags.map(t => t.code));
+      if (!isBulkMode && itemId && itemId !== 'bulk-add' && itemId !== 'bulk-remove') {
+        // Загружаем теги конкретного AI Item
+        const itemTagsRes = await apiClient.getItemTags(itemId);
+        if (itemTagsRes.success) {
+          setItemTags(itemTagsRes.tags || []);
+          setSelectedTagCodes(itemTagsRes.tags.map(t => t.code));
+        }
+      } else {
+        // В режиме массовых операций начинаем с пустого списка
+        setItemTags([]);
+        setSelectedTagCodes([]);
       }
 
       // Загружаем все доступные теги
@@ -75,29 +96,59 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
   };
 
   const handleSave = async () => {
-    if (!itemId || !currentContextCode) return;
+    if (!currentContextCode) return;
+
+    if (isBulkMode && bulkItemIds.length === 0) {
+      setError('Нет элементов для обработки');
+      return;
+    }
+
+    if (selectedTagCodes.length === 0) {
+      setError('Выберите хотя бы один тег');
+      return;
+    }
 
     setLoading(true);
     setError(null);
+
     try {
-      // Используем PUT для синхронизации (заменяет все теги)
-      const res = await apiClient.syncItemTags(itemId, selectedTagCodes);
-      if (res.success) {
-        setItemTags(res.tags || []);
-        // Вызываем callback с обновлёнными тегами
-        if (onTagsSaved) {
-          const tagSummaries = (res.tags || []).map(t => ({
-            id: t.id,
-            code: t.code,
-            name: t.name
-          }));
-          onTagsSaved(itemId, tagSummaries);
+      if (isBulkMode) {
+        // Массовые операции
+        let result;
+        if (bulkMode === 'add') {
+          result = await apiClient.addTagsToItems(bulkItemIds, selectedTagCodes);
+        } else {
+          result = await apiClient.removeTagsFromItems(bulkItemIds, selectedTagCodes);
         }
 
-        // Обновляем список всех тегов на случай, если были созданы новые
-        const allTagsRes = await apiClient.getTags();
-        if (allTagsRes.success) {
-          setAllTags(allTagsRes.tags || []);
+        if (result.success) {
+          if (onBulkTagsApplied) {
+            onBulkTagsApplied(bulkItemIds, bulkMode);
+          }
+          onClose();
+        } else {
+          setError('Ошибка при выполнении массовой операции');
+        }
+      } else {
+        // Обычная операция для одного элемента
+        if (!itemId) return;
+        const res = await apiClient.syncItemTags(itemId, selectedTagCodes);
+        if (res.success) {
+          setItemTags(res.tags || []);
+          if (onTagsSaved) {
+            const tagSummaries = (res.tags || []).map(t => ({
+              id: t.id,
+              code: t.code,
+              name: t.name
+            }));
+            onTagsSaved(itemId, tagSummaries);
+          }
+
+          // Обновляем список всех тегов на случай, если были созданы новые
+          const allTagsRes = await apiClient.getTags();
+          if (allTagsRes.success) {
+            setAllTags(allTagsRes.tags || []);
+          }
         }
       }
     } catch (err: any) {
@@ -205,6 +256,15 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
     }
   }, [isOpen]);
 
+  const getDialogTitle = () => {
+    if (bulkMode === 'add') {
+      return `Добавить теги: ${bulkItemIds.length} элементов`;
+    } else if (bulkMode === 'remove') {
+      return `Удалить теги: ${bulkItemIds.length} элементов`;
+    }
+    return `Теги: ${itemId}`;
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -224,12 +284,12 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
           className="px-3 py-2 border-b border-slate-700 bg-slate-800/80 flex justify-between items-center cursor-move select-none"
         >
           <div className="flex items-center gap-2">
-            <div className="bg-purple-500/20 p-1 rounded">
-              <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className={`p-1 rounded ${isBulkMode ? 'bg-orange-500/20' : 'bg-purple-500/20'}`}>
+              <svg className={`w-3.5 h-3.5 ${isBulkMode ? 'text-orange-400' : 'text-purple-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
               </svg>
             </div>
-            <h2 className="text-sm font-bold text-white tracking-wide">Теги: {itemId}</h2>
+            <h2 className="text-sm font-bold text-white tracking-wide">{getDialogTitle()}</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -258,33 +318,57 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
             </div>
           ) : (
             <>
-              {/* Текущие теги */}
-              <div className="p-3 border-b border-slate-700 bg-slate-800/30 shrink-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold text-slate-300">Назначенные теги</h3>
-                  <span className="text-[10px] text-slate-500">{itemTags.length}</span>
-                </div>
-                {itemTags.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {itemTags.map(tag => (
-                      <span
-                        key={tag.id}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/50 rounded text-[10px] font-mono"
-                        title={tag.description || undefined}
-                      >
-                        {tag.name}
-                      </span>
-                    ))}
+              {/* Текущие теги - только для обычного режима */}
+              {!isBulkMode && (
+                <div className="p-3 border-b border-slate-700 bg-slate-800/30 shrink-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-slate-300">Назначенные теги</h3>
+                    <span className="text-[10px] text-slate-500">{itemTags.length}</span>
                   </div>
-                ) : (
-                  <p className="text-[10px] text-slate-500 italic">Теги отсутствуют</p>
-                )}
-              </div>
+                  {itemTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {itemTags.map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/50 rounded text-[10px] font-mono"
+                          title={tag.description || undefined}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 italic">Теги отсутствуют</p>
+                  )}
+                </div>
+              )}
+
+              {/* Информация о массовой операции */}
+              {isBulkMode && (
+                <div className="p-3 border-b border-slate-700 bg-orange-900/20 shrink-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="text-xs font-bold text-orange-300">
+                      {bulkMode === 'add' ? 'Добавление тегов' : 'Удаление тегов'}
+                    </h3>
+                  </div>
+                  <p className="text-[10px] text-orange-200/80">
+                    Операция будет применена к {bulkItemIds.length} отфильтрованным элементам
+                  </p>
+                </div>
+              )}
 
               {/* Список всех тегов для выбора */}
               <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-300">Доступные теги</h3>
+                  <h3 className="text-xs font-bold text-slate-300">
+                    {isBulkMode 
+                      ? (bulkMode === 'add' ? 'Выберите теги для добавления' : 'Выберите теги для удаления')
+                      : 'Доступные теги'
+                    }
+                  </h3>
                   <button
                     onClick={() => setShowCreateForm(!showCreateForm)}
                     className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded transition-colors flex items-center gap-1"
@@ -395,6 +479,7 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
               <div className="p-3 border-t border-slate-700 bg-slate-800/50 flex justify-between items-center shrink-0">
                 <div className="text-[9px] text-slate-600">
                   Выбрано: {selectedTagCodes.length}
+                  {isBulkMode && ` • Элементов: ${bulkItemIds.length}`}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -405,20 +490,27 @@ const TagsDialog: React.FC<TagsDialogProps> = ({ isOpen, onClose, itemId, onTags
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={loading}
-                    className="bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-[10px] font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5"
+                    disabled={loading || selectedTagCodes.length === 0}
+                    className={`hover:opacity-90 disabled:bg-slate-700 disabled:text-slate-500 text-white text-[10px] font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
+                      isBulkMode 
+                        ? (bulkMode === 'add' ? 'bg-green-600' : 'bg-red-600')
+                        : 'bg-purple-600'
+                    }`}
                   >
                     {loading ? (
                       <>
                         <div className="animate-spin rounded-full h-2.5 w-2.5 border-b border-white"></div>
-                        Сохранение...
+                        {isBulkMode ? 'Применение...' : 'Сохранение...'}
                       </>
                     ) : (
                       <>
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        Сохранить
+                        {isBulkMode 
+                          ? (bulkMode === 'add' ? 'Добавить теги' : 'Удалить теги')
+                          : 'Сохранить'
+                        }
                       </>
                     )}
                   </button>

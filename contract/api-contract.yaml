@@ -2,9 +2,16 @@ openapi: 3.0.3
 info:
   title: AiItem RAG Architect API
   info:
-    version: 2.4.0
+    version: 2.5.1
     description: |
       RESTful API для системы RAG-анализа кодовой базы.
+
+      Версия 2.5.1:
+      • Добавлены API для массовых операций с тегами: POST /api/ai-items/bulk/tags/add и POST /api/ai-items/bulk/tags/remove
+      • Поддержка bulk операций для эффективного управления тегами множества AiItems
+
+      Версия 2.4.1:
+      • Добавлен Chunks API: POST /api/files/vectorize-chunk/{chunkId} для векторизации конкретного чанка
 
       Версия 2.4.0:
       • Добавлен Prompts API: полный CRUD для управления промптами LLM
@@ -64,6 +71,9 @@ tags:
     description: |
       Управление тегами для классификации и группировки AiItems.
       Теги изолированы по context-code.
+  - name: Chunks
+    description: |
+      Управление чанками (chunk_vector): векторизация, обновление метаданных.
 
 components:
   schemas:
@@ -451,6 +461,53 @@ components:
           description: Массив кодов тегов для добавления/удаления
           example: ["deprecated", "needs-review", "critical"]
 
+    BulkTagsRequest:
+      type: object
+      required: [itemIds, tagCodes]
+      properties:
+        itemIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: Массив ID элементов для массовой операции с тегами
+          example: ["utils.fetchData", "api.createUser", "db.saveRecord"]
+        tagCodes:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: Массив кодов тегов для добавления/удаления
+          example: ["deprecated", "needs-review"]
+
+    BulkTagsResponse:
+      type: object
+      required: [success, processedItems]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        processedItems:
+          type: integer
+          minimum: 0
+          description: Количество успешно обработанных элементов
+          example: 15
+        failedItems:
+          type: array
+          items:
+            type: object
+            required: [itemId, error]
+            properties:
+              itemId:
+                type: string
+                description: ID элемента, при обработке которого возникла ошибка
+                example: "utils.fetchData"
+              error:
+                type: string
+                description: Описание ошибки
+                example: "Item not found"
+          description: Список элементов с ошибками (присутствует только при наличии ошибок)
+
     # ────────────────────────────────────── Статистика
     TypeStat:
       type: object
@@ -691,6 +748,81 @@ components:
           type: boolean
           description: true если скрипт был из кэша, false если был сгенерирован
           example: false
+
+    NaturalQuerySuggestion:
+      type: object
+      required: [id, question, similarity, usage_count, is_valid]
+      properties:
+        id:
+          type: integer
+          description: ID скрипта
+          example: 42
+        question:
+          type: string
+          description: Текст вопроса из кэша
+          example: "Какие типы связей используются в проекте?"
+        similarity:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Коэффициент похожести (cosine similarity) между вопросом пользователя и сохранённым вопросом
+          example: 0.92
+        usage_count:
+          type: integer
+          description: Количество использований скрипта
+          example: 15
+        is_valid:
+          type: boolean
+          description: Валидность скрипта (false если скрипт вызывал ошибки)
+          example: true
+        last_result:
+          type: object
+          nullable: true
+          description: Последний сохранённый результат выполнения скрипта (если есть)
+          properties:
+            raw:
+              description: Сырые данные последнего выполнения
+              oneOf:
+                - type: array
+                  items: {}
+                - type: object
+            human:
+              type: string
+              description: Человекочитаемый текст последнего выполнения
+            executed_at:
+              type: string
+              format: date-time
+              description: Время последнего выполнения скрипта
+
+    NaturalQuerySuggestResponse:
+      type: object
+      required: [success, high_confidence, suggestions]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        high_confidence:
+          type: boolean
+          description: |
+            true если найден 1 результат с similarity >= 0.95 (рекомендация к использованию),
+            false если найдено несколько результатов с similarity < 0.95 (пользователь выбирает)
+          example: true
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/NaturalQuerySuggestion'
+          description: Список похожих вопросов из кэша
+          example:
+            - id: 42
+              question: "Какие типы связей используются в проекте?"
+              similarity: 0.97
+              usage_count: 15
+              is_valid: true
+              last_result:
+                raw: [{ code: "calls", label: "calls" }]
+                human: "В проекте используются следующие типы связей..."
+                executed_at: "2024-01-15T10:30:00.000Z"
 
     AgentScript:
       type: object
@@ -2059,15 +2191,18 @@ paths:
         Natural Query Engine — интеллектуальный слой для анализа кодовой базы.
         
         Пользователь задаёт вопрос на естественном языке, система:
-        1. Ищет похожий вопрос в кэше через FTS (Full Text Search)
-        2. Если не найден — генерирует новый async JS-скрипт через LLM
-        3. Выполняет скрипт в sandbox (только SELECT запросы к БД)
-        4. Превращает raw данные в человекочитаемый текст через LLM
-        5. Сохраняет скрипт в кэш для повторного использования
+        1. Проверяет точное совпадение вопроса в кэше
+        2. Если не найдено — выполняет векторный поиск по эмбеддингам вопросов
+           - Если similarity >= 0.95 — возвращает suggestion с high_confidence: true
+           - Если similarity >= threshold (0.8) — возвращает список suggestions
+        3. Если векторный поиск не дал результатов — использует FTS (Full Text Search)
+        4. Если не найден — генерирует новый async JS-скрипт через LLM
+        5. Выполняет скрипт в sandbox (только SELECT запросы к БД)
+        6. Превращает raw данные в человекочитаемый текст через LLM
+        7. Сохраняет скрипт в кэш и векторизует вопрос для будущего поиска
         
-        Скрипты кэшируются в таблице agent_script и могут быть переиспользованы
-        при похожих вопросах. Скрипты можно просматривать, редактировать и удалять
-        через CRUD эндпоинты /api/agent-scripts.
+        Скрипты кэшируются в таблице agent_script с колонкой question_embedding 
+        для быстрого векторного поиска похожих вопросов.
       requestBody:
         required: true
         content:
@@ -2089,6 +2224,57 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NaturalQueryErrorResponse' }
+
+  /api/v1/natural-query/suggest:
+    post:
+      tags: [Natural Query]
+      summary: Получить список похожих вопросов из кэша
+      description: |
+        Векторный поиск похожих вопросов по эмбеддингам. Возвращает список сохранённых
+        вопросов, отсортированных по similarity (cosine similarity).
+        
+        Используется для предложения пользователю готовых вопросов перед выполнением скрипта.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NaturalQueryRequest' }
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Максимальное количество результатов (по умолчанию из config.json)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+        - name: threshold
+          in: query
+          required: false
+          description: Минимальный порог similarity (0.0 - 1.0, по умолчанию из config.json)
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 1
+            default: 0.8
+      responses:
+        '200':
+          description: Список похожих вопросов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NaturalQuerySuggestResponse' }
+        '400':
+          description: Неверный запрос (отсутствуют обязательные поля)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Ошибка векторного поиска
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/agent-scripts:
     get:
@@ -2257,6 +2443,68 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '400':
           description: Отсутствует context-code
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/agent-scripts/{id}/embed:
+    post:
+      tags: [Natural Query]
+      summary: Векторизовать вопрос скрипта
+      description: |
+        Создаёт или обновляет эмбеддинг вопроса для указанного скрипта.
+        Используется для добавления векторного поиска к существующим скриптам.
+      parameters:
+        - name: context-code
+          in: query
+          required: true
+          description: Контекстный код для изоляции данных
+          schema:
+            type: string
+            example: "CARL"
+        - name: id
+          in: path
+          required: true
+          description: ID скрипта для векторизации
+          schema:
+            type: integer
+            example: 17
+      responses:
+        '200':
+          description: Эмбеддинг успешно создан/обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, scriptId, question, embedding_length]
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  message:
+                    type: string
+                    enum: ["Embedding created", "Embedding updated"]
+                  scriptId:
+                    type: integer
+                    example: 17
+                  question:
+                    type: string
+                    example: "Какие функции вызывают carl_auct._createNewAuction"
+                  embedding_length:
+                    type: integer
+                    example: 1536
+        '404':
+          description: Скрипт не найден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '400':
+          description: Неверный ID скрипта или отсутствует context-code
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Ошибка векторизации
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -3251,6 +3499,183 @@ paths:
               schema: { $ref: '#/components/schemas/TagItemsResponse' }
         '404':
           description: Тег не найден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ────────────────────────────────────── BULK TAGS OPERATIONS
+  /api/ai-items/bulk/tags/add:
+    post:
+      tags: [Tags]
+      summary: Массовое добавление тегов к AiItems
+      description: |
+        Добавляет указанные теги ко всем указанным AiItems одной операцией.
+        Если тег уже связан с AiItem, он будет проигнорирован (idempotent).
+        Операция продолжается даже если некоторые элементы не найдены.
+      parameters:
+        - name: context-code
+          in: query
+          required: true
+          description: Контекстный код для изоляции данных (произвольная строка)
+          schema:
+            type: string
+            example: "CARL"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkTagsRequest' }
+            example:
+              itemIds: ["utils.fetchData", "api.createUser", "db.saveRecord"]
+              tagCodes: ["deprecated", "needs-review"]
+      responses:
+        '200':
+          description: Массовая операция выполнена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkTagsResponse' }
+              example:
+                success: true
+                processedItems: 15
+                failedItems:
+                  - itemId: "nonexistent.function"
+                    error: "Item not found"
+        '400':
+          description: Неверный запрос (пустые массивы или некорректные данные)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Один или несколько тегов не найдены
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/ai-items/bulk/tags/remove:
+    post:
+      tags: [Tags]
+      summary: Массовое удаление тегов у AiItems
+      description: |
+        Удаляет указанные теги у всех указанных AiItems одной операцией.
+        Если тег не связан с AiItem, он будет проигнорирован (idempotent).
+        Операция продолжается даже если некоторые элементы не найдены.
+      parameters:
+        - name: context-code
+          in: query
+          required: true
+          description: Контекстный код для изоляции данных (произвольная строка)
+          schema:
+            type: string
+            example: "CARL"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkTagsRequest' }
+            example:
+              itemIds: ["utils.fetchData", "api.createUser", "db.saveRecord"]
+              tagCodes: ["deprecated", "needs-review"]
+      responses:
+        '200':
+          description: Массовая операция выполнена
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkTagsResponse' }
+              example:
+                success: true
+                processedItems: 15
+                failedItems:
+                  - itemId: "nonexistent.function"
+                    error: "Item not found"
+        '400':
+          description: Неверный запрос (пустые массивы или некорректные данные)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Один или несколько тегов не найдены
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ────────────────────────────────────── CHUNKS
+  /api/files/vectorize-chunk/{chunkId}:
+    post:
+      tags: [Chunks]
+      summary: Векторизация конкретного чанка по ID
+      description: |
+        Создает embedding для указанного чанка.
+        Если чанк уже имеет embedding, пропускает обработку (используйте force=true для перезаписи).
+      operationId: vectorizeChunk
+      parameters:
+        - name: chunkId
+          in: path
+          required: true
+          description: ID чанка в таблице chunk_vector
+          schema:
+            type: integer
+            example: 123
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                  description: Перезаписать существующий embedding
+      responses:
+        '200':
+          description: Чанк успешно векторизован или пропущен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  chunkId:
+                    type: integer
+                    example: 123
+                  vectorDimension:
+                    type: integer
+                    example: 1536
+                    description: Размерность вектора (отсутствует если skipped=true)
+                  textLength:
+                    type: integer
+                    example: 456
+                    description: Длина текста чанка (отсутствует если skipped=true)
+                  skipped:
+                    type: boolean
+                    description: true если чанк уже был векторизован
+                  message:
+                    type: string
+                    description: Сообщение при skipped=true
+        '400':
+          description: Чанк имеет пустой контент
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Чанк не найден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Ошибка сервера
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }

@@ -1,4 +1,4 @@
-import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse, AiCommentResponse } from '../types';
+import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse, AiCommentResponse, BulkTagsResponse } from '../types';
 import { MOCK_AI_ITEMS } from '../constants';
 import { validateApiResponse, ValidationResult } from './contractValidator';
 import { uiLogger } from './uiLogger';
@@ -713,6 +713,24 @@ export class ApiClient {
       method: 'PUT',
       body: JSON.stringify({ tagCodes }),
     });
+  }
+
+  // Массовое добавление тегов к элементам
+  async addTagsToItems(itemIds: string[], tagCodes: string[]): Promise<BulkTagsResponse> {
+    const response = await this.request('/api/ai-items/bulk/tags/add', {
+      method: 'POST',
+      body: JSON.stringify({ itemIds, tagCodes })
+    });
+    return response as BulkTagsResponse;
+  }
+
+  // Массовое удаление тегов у элементов  
+  async removeTagsFromItems(itemIds: string[], tagCodes: string[]): Promise<BulkTagsResponse> {
+    const response = await this.request('/api/ai-items/bulk/tags/remove', {
+      method: 'POST', 
+      body: JSON.stringify({ itemIds, tagCodes })
+    });
+    return response as BulkTagsResponse;
   }
 
 }

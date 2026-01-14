@@ -369,3 +369,19 @@ export interface ItemTagsResponse {
   itemId: string;
   tags: Tag[];
 }
+
+// ────────────────────────────────────── Bulk Tags Operations Types (v2.5.1)
+
+export interface BulkTagsRequest {
+  itemIds: string[];
+  tagCodes: string[];
+}
+
+export interface BulkTagsResponse {
+  success: boolean;
+  processedItems: number;
+  failedItems?: {
+    itemId: string;
+    error: string;
+  }[];
+}

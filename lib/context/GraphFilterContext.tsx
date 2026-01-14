@@ -14,6 +14,24 @@ export interface GraphFilterContextValue {
   clearHistory: () => void;
   // Очистка всех фильтров
   clearFilters: () => void;
+
+  // Фильтры по типам
+  typeFilterEnabled: boolean;
+  setTypeFilterEnabled: (enabled: boolean) => void;
+  selectedTypes: Set<string>;
+  toggleType: (type: string) => void;
+  setAllTypes: (types: string[]) => void;
+  
+  // Фильтры по тегам
+  tagFilterEnabled: boolean;
+  setTagFilterEnabled: (enabled: boolean) => void;
+  selectedTagCodes: Set<string>;
+  toggleTag: (tagCode: string) => void;
+  setAllTags: (tagCodes: string[]) => void;
+
+  // Диалог фильтрации
+  isFilterDialogOpen: boolean;
+  setIsFilterDialogOpen: (open: boolean) => void;
 }
 
 const GraphFilterContext = createContext<GraphFilterContextValue | null>(null);
@@ -33,6 +51,17 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [filterHistory, setFilterHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(KEYS.HISTORY) || '[]'); } catch { return []; }
   });
+
+  // Фильтры по типам
+  const [typeFilterEnabled, setTypeFilterEnabled] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+
+  // Фильтры по тегам
+  const [tagFilterEnabled, setTagFilterEnabled] = useState(false);
+  const [selectedTagCodes, setSelectedTagCodes] = useState<Set<string>>(new Set());
+
+  // Диалог фильтрации
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
 
   const addToHistory = useCallback((query: string) => {
     if (!query.trim() || query.length < 2) return;
@@ -60,11 +89,41 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
     localStorage.removeItem(KEYS.HISTORY);
   }, []);
 
+  const toggleType = useCallback((type: string) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }, []);
+
+  const setAllTypes = useCallback((types: string[]) => {
+    setSelectedTypes(new Set(types));
+  }, []);
+
+  const toggleTag = useCallback((tagCode: string) => {
+    setSelectedTagCodes(prev => {
+      const next = new Set(prev);
+      if (next.has(tagCode)) next.delete(tagCode);
+      else next.add(tagCode);
+      return next;
+    });
+  }, []);
+
+  const setAllTags = useCallback((tagCodes: string[]) => {
+    setSelectedTagCodes(new Set(tagCodes));
+  }, []);
+
   // Очистка всех фильтров (используется при смене контекста)
   const clearFilters = useCallback(() => {
     setFilteredItemIds(new Set());
     setInspectorSearchState('');
     setGraphSearchState('');
+    setTypeFilterEnabled(false);
+    setSelectedTypes(new Set());
+    setTagFilterEnabled(false);
+    setSelectedTagCodes(new Set());
     localStorage.removeItem(KEYS.INSPECTOR);
     localStorage.removeItem(KEYS.GRAPH);
     console.log('[GraphFilter] All filters cleared due to context change');
@@ -80,7 +139,22 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
     filterHistory,
     addToHistory,
     clearHistory,
-    clearFilters
+    clearFilters,
+    // Типы
+    typeFilterEnabled,
+    setTypeFilterEnabled,
+    selectedTypes,
+    toggleType,
+    setAllTypes,
+    // Теги
+    tagFilterEnabled,
+    setTagFilterEnabled,
+    selectedTagCodes,
+    toggleTag,
+    setAllTags,
+    // Диалог
+    isFilterDialogOpen,
+    setIsFilterDialogOpen,
   };
 
   return (

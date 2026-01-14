@@ -48,6 +48,9 @@ const Inspector: React.FC<InspectorProps> = () => {
   // Ref для отслеживания контекста, с которым был выбран элемент
   const selectedIdContextRef = useRef<string | null>(null);
 
+  const { typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, setIsFilterDialogOpen } = useGraphFilter();
+
+
   
   // Отладка изменения поиска
   useEffect(() => {
@@ -226,34 +229,49 @@ const Inspector: React.FC<InspectorProps> = () => {
   }, [selectedId, itemsList, currentContextCode]);
   
 
-  // Мемоизируем filteredItems чтобы избежать пересоздания на каждый рендер
-  // Поддержка regex: если поиск обёрнут в /.../ — используется регулярное выражение
+  // Мемоизируем filteredItems с поддержкой regex, типов и тегов
   const filteredItems = useMemo(() => {
+    let items = itemsList;
+
+    // Фильтр по типам
+    if (typeFilterEnabled && selectedTypes.size > 0) {
+      items = items.filter(item => selectedTypes.has(item.type));
+    }
+
+    // Фильтр по тегам
+    if (tagFilterEnabled && selectedTagCodes.size > 0) {
+      items = items.filter(item =>
+        item.tags?.some(tag => selectedTagCodes.has(tag.code))
+      );
+    }
+
+    // Фильтр по поиску (regex или обычный)
     const trimmedSearch = inspectorSearch.trim();
+    if (trimmedSearch) {
+      const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
 
-    // Проверяем, является ли это regex-паттерном: /pattern/ или /pattern/flags
-    const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
-
-    if (regexMatch) {
-      try {
-        const regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
-        return itemsList.filter(item =>
-          regex.test(item.id) || regex.test(item.filePath)
+      if (regexMatch) {
+        try {
+          const regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
+          items = items.filter(item =>
+            regex.test(item.id) || regex.test(item.filePath)
+          );
+        } catch {
+          // Невалидный regex — возвращаем пустой список
+          return [];
+        }
+      } else {
+        const searchLower = trimmedSearch.toLowerCase();
+        items = items.filter(item =>
+          item.id.toLowerCase().includes(searchLower) ||
+          item.filePath.toLowerCase().includes(searchLower)
         );
-      } catch {
-        // Невалидный regex — возвращаем пустой список
-        return [];
       }
     }
 
-    // Обычный поиск через includes
-    const searchLower = trimmedSearch.toLowerCase();
-    return itemsList.filter(item =>
-      item.id.toLowerCase().includes(searchLower) ||
-      item.filePath.toLowerCase().includes(searchLower)
-    );
-  }, [itemsList, inspectorSearch]);
-
+    return items;
+  }, [itemsList, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes]);  
+ 
   // Публикация отфильтрованных ID в контекст для синхронизации с графом
   // Обновляем только при реальном изменении списка ID
   useEffect(() => {
@@ -403,6 +421,20 @@ const Inspector: React.FC<InspectorProps> = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
               Query
+            </button>
+            <button
+              onClick={() => setIsFilterDialogOpen(true)}
+              className={`text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0 ${
+                (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+                  ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+              }`}
+              title="Фильтры по типам и тегам"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filter
             </button>
           </div>
         </div>

@@ -14,6 +14,7 @@ import { MOCK_FILE_TREE } from './constants';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from './services/apiClient';
 import { GraphFilterProvider, useGraphFilter } from './lib/context/GraphFilterContext';
 import { DataCacheProvider, useDataCache } from './lib/context/DataCacheContext';
+import FilterDialog from './components/FilterDialog';
 
 // Глобальная переменная для context_code
 declare global {
@@ -49,8 +50,8 @@ const AppContent: React.FC = () => {
     isPrefetching
   } = useDataCache();
 
-  // Доступ к фильтрам для очистки при смене контекста
-  const { clearFilters } = useGraphFilter();
+  // Доступ к фильтрам для очистки при смене контекста и диалог фильтрации
+  const { clearFilters, isFilterDialogOpen, setIsFilterDialogOpen } = useGraphFilter();
 
   // Обёртка для setContextCode с синхронным обновлением глобальной переменной
   const setContextCode = (code: string) => {
@@ -416,6 +417,12 @@ const AppContent: React.FC = () => {
         isOpen={isPromptsEditorOpen}
         onClose={() => setIsPromptsEditorOpen(false)}
       />
+
+      <FilterDialog
+        isOpen={isFilterDialogOpen}
+        onClose={() => setIsFilterDialogOpen(false)}
+      />
+
     </div>
   );
 };

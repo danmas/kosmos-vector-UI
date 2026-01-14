@@ -46,7 +46,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     setGraphSearch,
     inspectorSearch,
     filterHistory,
-    clearHistory
+    clearHistory,
+    typeFilterEnabled,
+    selectedTypes,
+    tagFilterEnabled,
+    selectedTagCodes,
+    setIsFilterDialogOpen
   } = useGraphFilter();
   const [showHistory, setShowHistory] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -62,7 +67,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { getGraph, setGraph, currentContextCode } = useDataCache();
+  const { getGraph, setGraph, currentContextCode, getItemsList } = useDataCache();
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -392,6 +397,17 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       });
     }
 
+    // 3.5. Создаём lookup для тегов из itemsList (для фильтрации по тегам)
+    const itemsListData = getItemsList();
+    const itemTagsMap = new Map<string, Set<string>>();
+    if (itemsListData?.data) {
+      for (const item of itemsListData.data) {
+        if (item.tags && item.tags.length > 0) {
+          itemTagsMap.set(item.id, new Set(item.tags.map(t => t.code)));
+        }
+      }
+    }
+
     // 4. ОСНОВНАЯ ФИЛЬТРАЦИЯ
     const filteredNodes = graphData.nodes.filter(node => {
       // Сфокусированные узлы и их соседи - всегда
@@ -413,6 +429,21 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         return inspectorRegex && inspectorRegex.test(node.id);
       }
 
+      // Фильтр по типам (если включён)
+      if (typeFilterEnabled && selectedTypes.size > 0) {
+        if (!selectedTypes.has(node.type)) {
+          return false;
+        }
+      }
+
+      // Фильтр по тегам (если включён)
+      if (tagFilterEnabled && selectedTagCodes.size > 0) {
+        const nodeTags = itemTagsMap.get(node.id);
+        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
+          return false;
+        }
+      }
+
       // Если фильтров нет вообще - показываем всё
       return true;
     });
@@ -428,7 +459,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch]);
+  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, getItemsList]);
 
   // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик) - ТЕПЕРЬ ОТКЛЮЧЕНА, 
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
@@ -903,6 +934,20 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
             Query
+          </button>
+          <button
+            onClick={() => setIsFilterDialogOpen(true)}
+            className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${
+              (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+                ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+            }`}
+            title="Фильтры по типам и тегам"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filter
           </button>
           {focusedNodeIds.size > 0 && (
             <div className="flex items-center gap-1">

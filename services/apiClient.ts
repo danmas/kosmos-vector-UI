@@ -553,6 +553,28 @@ export class ApiClient {
   }
 
   /**
+   * POST /api/v1/natural-query/suggest - поиск похожих вопросов
+   */
+  async suggestSimilarQuestions(
+    question: string, 
+    limit: number = 5, 
+    threshold: number = 0.8
+  ): Promise<import('../types').SuggestResponse> {
+    const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      threshold: threshold.toString()
+    });
+    return this.request<import('../types').SuggestResponse>(`/api/v1/natural-query/suggest?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        contextCode
+      }),
+    });
+  }
+
+  /**
    * GET /api/agent-scripts - список всех скриптов (с пагинацией)
    */
   async getAgentScripts(page: number = 1, limit: number = 50): Promise<import('../types').AgentScriptsResponse> {

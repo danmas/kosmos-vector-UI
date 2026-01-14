@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { NaturalQueryResponse, AgentScript } from '../types';
+import { NaturalQueryResponse, AgentScript, SuggestSuggestion } from '../types';
 import { apiClient } from '../services/apiClient';
 
 interface NaturalQueryDialogProps {
@@ -21,6 +21,11 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [filteredSuggestions, setFilteredSuggestions] = useState<AgentScript[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(-1);
+    
+    // Similar questions state (серверный поиск)
+    const [isSearchingSimilar, setIsSearchingSimilar] = useState(false);
+    const [similarSuggestions, setSimilarSuggestions] = useState<SuggestSuggestion[]>([]);
+    const [showSimilarResults, setShowSimilarResults] = useState(false);
     const [isEditingScript, setIsEditingScript] = useState(false);
     const [editedScriptCode, setEditedScriptCode] = useState('');
     const [isSavingScript, setIsSavingScript] = useState(false);
@@ -86,6 +91,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         const handleClickOutside = (event: MouseEvent) => {
             if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
                 setShowSuggestions(false);
+                setShowSimilarResults(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
@@ -195,7 +201,70 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         } finally {
             setIsLoading(false);
             setShowSuggestions(false);
+            setShowSimilarResults(false);
             setSelectedIndex(-1);
+            inputRef.current?.focus();
+        }
+    };
+
+    const handleSearchSimilar = async () => {
+        if (!question.trim()) return;
+        
+        setIsSearchingSimilar(true);
+        setShowSuggestions(false); // Скрыть обычный dropdown
+        
+        try {
+            const res = await apiClient.suggestSimilarQuestions(question.trim());
+            if (res.success && res.suggestions.length > 0) {
+                // Сортировка по similarity desc (наиболее похожие выше)
+                const sorted = [...res.suggestions].sort((a, b) => b.similarity - a.similarity);
+                setSimilarSuggestions(sorted);
+                setShowSimilarResults(true);
+            } else {
+                setSimilarSuggestions([]);
+                setShowSimilarResults(true); // Показать "No similar questions found"
+            }
+        } catch (err) {
+            console.error('Failed to search similar questions:', err);
+            setSimilarSuggestions([]);
+            setShowSimilarResults(true);
+        } finally {
+            setIsSearchingSimilar(false);
+        }
+    };
+
+    const selectSimilarSuggestion = async (suggestion: SuggestSuggestion) => {
+        setQuestion(suggestion.question);
+        setShowSimilarResults(false);
+        setSimilarSuggestions([]);
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const res = await apiClient.getAgentScript(suggestion.id);
+            if (res.success) {
+                const fullScript = res.script;
+                setScriptDetails(fullScript);
+
+                if (fullScript.last_result) {
+                    setResponse({
+                        success: true,
+                        human: fullScript.last_result.human,
+                        raw: fullScript.last_result.raw,
+                        scriptId: fullScript.id,
+                        cached: true,
+                        last_result: fullScript.last_result
+                    });
+                    setActiveTab('result');
+                } else {
+                    setResponse(null);
+                    setActiveTab('result');
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching script details:', err);
+        } finally {
+            setIsLoading(false);
             inputRef.current?.focus();
         }
     };
@@ -497,10 +566,14 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 ref={inputRef}
                                 type="text"
                                 value={question}
-                                onFocus={() => setShowSuggestions(true)}
+                                onFocus={() => {
+                                    setShowSuggestions(true);
+                                    setShowSimilarResults(false);
+                                }}
                                 onChange={(e) => {
                                     setQuestion(e.target.value);
                                     setShowSuggestions(true);
+                                    setShowSimilarResults(false);
                                 }}
                                 onKeyDown={onKeyDown}
                                 placeholder="Ask about the codebase..."
@@ -512,8 +585,8 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 </div>
                             )}
 
-                            {/* Suggestions Dropdown */}
-                            {showSuggestions && filteredSuggestions.length > 0 && (
+                            {/* Existing Suggestions Dropdown (клиентская фильтрация) */}
+                            {showSuggestions && !showSimilarResults && filteredSuggestions.length > 0 && (
                                 <div
                                     ref={suggestionsRef}
                                     className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in duration-200"
@@ -532,7 +605,58 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                     ))}
                                 </div>
                             )}
+
+                            {/* Similar Questions Dropdown (серверный поиск) */}
+                            {showSimilarResults && (
+                                <div
+                                    ref={suggestionsRef}
+                                    className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded shadow-xl overflow-hidden z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in duration-200"
+                                >
+                                    {similarSuggestions.length > 0 ? (
+                                        similarSuggestions.map((suggestion) => (
+                                            <button
+                                                key={suggestion.id}
+                                                onClick={() => selectSimilarSuggestion(suggestion)}
+                                                className="w-full text-left px-3 py-2 text-[10px] transition-colors border-b border-slate-700 last:border-0 text-slate-300 hover:bg-slate-700 hover:text-white flex items-center justify-between gap-2"
+                                            >
+                                                <span className="truncate flex-1">{suggestion.question}</span>
+                                                <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                                    suggestion.similarity >= 0.95 
+                                                        ? 'bg-green-500/20 text-green-400' 
+                                                        : suggestion.similarity >= 0.9 
+                                                            ? 'bg-blue-500/20 text-blue-400' 
+                                                            : 'bg-slate-600/50 text-slate-400'
+                                                }`}>
+                                                    {Math.round(suggestion.similarity * 100)}%
+                                                </span>
+                                            </button>
+                                        ))
+                                    ) : (
+                                        <div className="px-3 py-2 text-[10px] text-slate-500 text-center">
+                                            No similar questions found
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
+                        
+                        {/* Кнопка поиска похожих */}
+                        <button
+                            onClick={handleSearchSimilar}
+                            disabled={isSearchingSimilar || !question.trim()}
+                            title="Find similar questions"
+                            className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-300 hover:text-white p-1.5 rounded transition-all shadow-md active:scale-95 border border-slate-600 disabled:border-slate-700"
+                        >
+                            {isSearchingSimilar ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b border-slate-400"></div>
+                            ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            )}
+                        </button>
+                        
+                        {/* Run button */}
                         <button
                             onClick={() => handleQuery()}
                             disabled={isLoading || !question.trim()}

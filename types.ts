@@ -285,6 +285,27 @@ export interface AgentScriptDetailResponse {
   script: AgentScript;
 }
 
+// ────────────────────────────────────── Natural Query Suggest Types
+
+export interface SuggestSuggestion {
+  id: number;
+  question: string;
+  similarity: number;
+  usage_count: number;
+  is_valid: boolean;
+  last_result?: {
+    raw: any;
+    human: string;
+    executed_at: string;
+  } | null;
+}
+
+export interface SuggestResponse {
+  success: boolean;
+  high_confidence: boolean;
+  suggestions: SuggestSuggestion[];
+}
+
 // ────────────────────────────────────── Prompts Types (v2.4.0)
 
 export interface PromptTemplate {

@@ -234,7 +234,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
     };
 
     const selectSimilarSuggestion = async (suggestion: SuggestSuggestion) => {
-        setQuestion(suggestion.question);
+        // НЕ меняем вопрос пользователя — он хочет ответ на СВОЙ вопрос
         setShowSimilarResults(false);
         setSimilarSuggestions([]);
         setIsLoading(true);
@@ -245,21 +245,11 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
             if (res.success) {
                 const fullScript = res.script;
                 setScriptDetails(fullScript);
-
-                if (fullScript.last_result) {
-                    setResponse({
-                        success: true,
-                        human: fullScript.last_result.human,
-                        raw: fullScript.last_result.raw,
-                        scriptId: fullScript.id,
-                        cached: true,
-                        last_result: fullScript.last_result
-                    });
-                    setActiveTab('result');
-                } else {
-                    setResponse(null);
-                    setActiveTab('result');
-                }
+                // Показываем скрипт для редактирования, НЕ показываем last_result
+                setResponse(null);
+                setEditedScriptCode(fullScript.script);
+                setIsEditingScript(true);
+                setActiveTab('script');
             }
         } catch (err) {
             console.error('Error fetching script details:', err);
@@ -669,7 +659,7 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
 
                 {/* Content Area */}
                 <div className="flex-1 flex flex-col min-h-0 relative z-10">
-                    {response ? (
+                    {(response || scriptDetails) ? (
                         <>
                             {/* Tabs */}
                             <div className="flex border-b border-slate-700 bg-slate-800/50 shrink-0">
@@ -690,30 +680,36 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                             {/* Tab Content */}
                             <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50 scrollbar-thin scrollbar-thumb-slate-700">
                                 {activeTab === 'result' && (
-                                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                                        <div className="bg-slate-800/60 border border-slate-700 rounded p-3 shadow-inner">
-                                            <p className="text-slate-300 text-xs leading-relaxed">
-                                                {response.human}
-                                            </p>
-                                        </div>
-
-                                        {response.cached && (
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
-                                                    Cached
-                                                </div>
-                                                {response.last_result?.executed_at && (
-                                                    <div className="text-[8px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                                        <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                        {new Date(response.last_result.executed_at).toLocaleString()}
-                                                    </div>
-                                                )}
+                                    response ? (
+                                        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                                            <div className="bg-slate-800/60 border border-slate-700 rounded p-3 shadow-inner">
+                                                <p className="text-slate-300 text-xs leading-relaxed">
+                                                    {response.human}
+                                                </p>
                                             </div>
-                                        )}
-                                    </div>
+
+                                            {response.cached && (
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1.5 text-green-400/70 text-[9px] font-bold uppercase tracking-tight">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span>
+                                                        Cached
+                                                    </div>
+                                                    {response.last_result?.executed_at && (
+                                                        <div className="text-[8px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            {new Date(response.last_result.executed_at).toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-slate-500 text-[10px]">
+                                            Edit the script and click Run to get results
+                                        </div>
+                                    )
                                 )}
 
                                 {activeTab === 'script' && (
@@ -828,24 +824,30 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                 )}
 
                                 {activeTab === 'raw' && (
-                                    <div className="animate-in fade-in slide-in-from-bottom-1 duration-200 h-full flex flex-col gap-3">
-                                        <div className="flex-1 bg-slate-950 rounded border border-slate-700 overflow-hidden shadow-inner">
-                                            <pre className="h-full overflow-auto p-2.5 text-[10px] font-mono text-slate-400 selection:bg-blue-500/30">
-                                                <code>{JSON.stringify(response.raw, null, 2)}</code>
-                                            </pre>
+                                    response ? (
+                                        <div className="animate-in fade-in slide-in-from-bottom-1 duration-200 h-full flex flex-col gap-3">
+                                            <div className="flex-1 bg-slate-950 rounded border border-slate-700 overflow-hidden shadow-inner">
+                                                <pre className="h-full overflow-auto p-2.5 text-[10px] font-mono text-slate-400 selection:bg-blue-500/30">
+                                                    <code>{JSON.stringify(response.raw, null, 2)}</code>
+                                                </pre>
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={applyToSearch}
+                                                    className="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-slate-600 flex items-center gap-1.5"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" />
+                                                    </svg>
+                                                    Apply to Filter
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-end">
-                                            <button
-                                                onClick={applyToSearch}
-                                                className="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-slate-600 flex items-center gap-1.5"
-                                            >
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" />
-                                                </svg>
-                                                Apply to Filter
-                                            </button>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-slate-500 text-[10px]">
+                                            No data yet. Run the script first.
                                         </div>
-                                    </div>
+                                    )
                                 )}
                             </div>
                         </>

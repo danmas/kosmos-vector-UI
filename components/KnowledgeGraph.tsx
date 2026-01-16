@@ -684,6 +684,24 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           }
         }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
       })
+      .on("mousemove", (event: any, d: any) => {
+        // Сбрасываем таймер при любом движении мыши — tooltip появится только при неподвижной мыши
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+        }
+        const clientX = event.clientX;
+        const clientY = event.clientY;
+        tooltipTimeoutRef.current = setTimeout(() => {
+          const svgRect = svgRef.current?.getBoundingClientRect();
+          if (svgRect) {
+            setTooltip({
+              node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
+              x: clientX - svgRect.left + 20,
+              y: clientY - svgRect.top - 10
+            });
+          }
+        }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
+      })
       .on("mouseleave", () => {
         // Очищаем timeout при уходе курсора — tooltip не появится если ушли раньше
         if (tooltipTimeoutRef.current) {
@@ -798,6 +816,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     });
 
     function dragstarted(event: any, d: any) {
+      // Сбрасываем таймер tooltip при начале перетаскивания
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = null;
+      }
+
       if (!event.active) simulation.alphaTarget(0.3).restart();
 
       // Convert screen coordinates to graph coordinates considering zoom/pan
@@ -810,6 +834,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
 
     function dragged(event: any, d: any) {
+      // Сбрасываем таймер tooltip при перетаскивании
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = null;
+      }
+
       // Convert screen coordinates to graph coordinates considering zoom/pan
       const pointer = d3.pointer(event, container.node());
       d.fx = pointer[0];

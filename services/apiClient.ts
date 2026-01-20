@@ -352,6 +352,13 @@ export class ApiClient {
     });
   }
 
+  // POST /api/items/:id/analyze-logic - анализ логики через серверный LLM
+  async analyzeLogicViaServer(itemId: string): Promise<LogicAnalysisResponse> {
+    return this.request<LogicAnalysisResponse>(`/api/items/${encodeURIComponent(itemId)}/analyze-logic`, {
+      method: 'POST',
+    });
+  }
+
   // GET /api/items/:id/comment - получить комментарий для AiItem
   async getComment(itemId: string): Promise<AiCommentResponse> {
     return this.request<AiCommentResponse>(`/api/items/${encodeURIComponent(itemId)}/comment`);

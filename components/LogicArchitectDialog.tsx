@@ -135,24 +135,37 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
     }
   };
 
-  const handleProcess = async () => {
-    if (!inputText.trim()) {
-      setError("Please enter JSON function description");
-      return;
-    }
-
+  const handleProcess = async (mode: 'client' | 'server') => {
     setIsLoading(true);
     setError(null);
     setRawResponse('');
     setLogicDescription('');
+    
     try {
-      const parsed = sanitizeAndParse(inputText);
+      let response: LogicAnalysisResponse;
       
-      if (!parsed.body) {
-        throw new Error("JSON must contain 'body' field with function source code.");
+      if (mode === 'client') {
+        // Клиентский режим: анализ через Google Gemini напрямую из браузера
+        if (!inputText.trim()) {
+          throw new Error("Please enter JSON function description");
+        }
+        
+        const parsed = sanitizeAndParse(inputText);
+        
+        if (!parsed.body) {
+          throw new Error("JSON must contain 'body' field with function source code.");
+        }
+        
+        response = await analyzeFunctionLogicFromMetadata(parsed as FunctionMetadata);
+      } else {
+        // Серверный режим: анализ через сервер 3200
+        if (!item?.id) {
+          throw new Error("Item ID is required for server-side analysis");
+        }
+        
+        response = await apiClient.analyzeLogicViaServer(item.id);
       }
       
-      const response: LogicAnalysisResponse = await analyzeFunctionLogicFromMetadata(parsed as FunctionMetadata);
       setGraph(response.graph);
       setLogicDescription(response.logic);
       setRawResponse(JSON.stringify(response, null, 2));
@@ -451,25 +464,48 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
                 </div>
               )}
 
-              <div className="p-2 border-t border-slate-800 bg-slate-900/80">
+              <div className="p-2 border-t border-slate-800 bg-slate-900/80 flex gap-2">
                 <button
-                  onClick={handleProcess}
+                  onClick={() => handleProcess('client')}
                   disabled={isLoading}
-                  className={`w-full py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all shadow-lg active:scale-[0.98] text-sm ${
+                  className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all shadow-lg active:scale-[0.98] text-sm ${
                     isLoading 
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
                   }`}
+                  title="Build logic using client-side Google Gemini API"
                 >
                   {isLoading ? (
                     <>
                       <RefreshCcw className="w-4 h-4 animate-spin" />
-                      Analyzing logic...
+                      Analyzing...
                     </>
                   ) : (
                     <>
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      Build logic
+                      Build (Client)
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleProcess('server')}
+                  disabled={isLoading || !item?.id}
+                  className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all shadow-lg active:scale-[0.98] text-sm ${
+                    isLoading || !item?.id
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                  }`}
+                  title="Build logic using server-side LLM (requires item ID)"
+                >
+                  {isLoading ? (
+                    <>
+                      <RefreshCcw className="w-4 h-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      Build (Server)
                     </>
                   )}
                 </button>

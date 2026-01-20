@@ -350,12 +350,14 @@ const MOCK_AI_ITEMS = [
 
 // --- Gemini Service Setup ---
 let GoogleGenAI;
+let Type;
 
 // Async function to initialize Gemini
 async function initializeGemini() {
   try {
     const geminiModule = await import('@google/genai');
     GoogleGenAI = geminiModule.GoogleGenAI;
+    Type = geminiModule.Type;
     console.log('Gemini SDK loaded successfully');
   } catch (error) {
     console.warn('Gemini SDK not available. Install @google/genai for chat functionality.');
@@ -1064,6 +1066,170 @@ app.get('/api/items/:id', (req, res) => {
   }
 
   res.json(item);
+});
+
+// Функция для анализа логики функции через Gemini
+const analyzeLogicWithGemini = async (body, metadata) => {
+  if (!Type) {
+    throw new Error('Gemini SDK Type is not available. Make sure @google/genai is installed.');
+  }
+
+  const RESPONSE_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+      logic: {
+        type: Type.STRING,
+        description: "Формальное описание логики на русском языке: вызываемые функции, таблицы, условия."
+      },
+      graph: {
+        type: Type.OBJECT,
+        properties: {
+          nodes: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                type: {
+                  type: Type.STRING,
+                  enum: ['start', 'end', 'decision', 'process', 'db_call', 'exception']
+                },
+                label: { type: Type.STRING },
+                details: { type: Type.STRING }
+              },
+              required: ['id', 'type', 'label']
+            }
+          },
+          edges: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                from: { type: Type.STRING },
+                to: { type: Type.STRING },
+                label: { type: Type.STRING }
+              },
+              required: ['id', 'from', 'to']
+            }
+          }
+        },
+        required: ['nodes', 'edges']
+      }
+    },
+    required: ['logic', 'graph']
+  };
+
+  const prompt = `
+    Проанализируй следующий исходный код функции и предоставь структурированный ответ.
+
+    ИСХОДНЫЙ КОД:
+    ${body}
+
+    МЕТАДАННЫЕ:
+    ${JSON.stringify({
+      signature: metadata.signature,
+      called_functions: metadata.called_functions,
+      tables: metadata.select_from,
+      function_name: metadata.s_name,
+      description: metadata.comment
+    }, null, 2)}
+
+    ТВОЯ ЗАДАЧА СОСТОИТ ИЗ ДВУХ ЧАСТЕЙ:
+
+    1. РАЗДЕЛ "logic" (Текстовое описание):
+    - Опиши логику работы функции на РУССКОМ ЯЗЫКЕ.
+    - Перечисли все вызываемые функции (используй полные имена, если они известны).
+    - Укажи, какие таблицы читаются (SELECT) и в какие записываются данные (INSERT/UPDATE/DELETE).
+    - Опиши все ветвления (if/else, switch) и циклы.
+    - Описание должно быть формальным и точным.
+    - Отформатируй текст чтобы было красиво и понятно.
+
+    2. РАЗДЕЛ "graph" (Граф потока управления):
+    Соблюдай строгие правила связей:
+    - 'start': Начало функции. Ровно ОДНА исходящая связь.
+    - 'decision': Развилка/условие. Минимум ДВЕ исходящие связи (например, "Да"/"Нет").
+    - 'process': Обычное действие или вычисление. Один вход, один выход.
+    - 'db_call': Операция с БД. Один вход, один выход (трактуется как процесс).
+    - 'end' или 'exception': Точки выхода. Минимум один вход, НОЛЬ исходящих связей.
+
+    Используй краткие и понятные метки (labels) для узлов и связей.
+  `;
+
+  try {
+    const ai = getGeminiClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    });
+
+    const result = JSON.parse(response.text);
+    return result;
+  } catch (error) {
+    console.error("Error analyzing code logic:", error);
+    throw error;
+  }
+};
+
+// POST /api/items/:id/analyze-logic - анализ логики функции через серверный LLM
+app.post('/api/items/:id/analyze-logic', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const contextCode = req.query['context-code'] || 'default';
+    console.log(`[API] POST /api/items/${id}/analyze-logic - Analyzing logic for context: ${contextCode}`);
+
+    // Получаем AiItem из БД (пока используем MOCK_AI_ITEMS)
+    const item = MOCK_AI_ITEMS.find(item => item.id === id);
+    if (!item) {
+      return res.status(404).json({ 
+        success: false,
+        error: `AiItem with id '${id}' not found` 
+      });
+    }
+
+    // Формируем метаданные для анализа
+    const metadata = {
+      body: item.l0_code,
+      s_name: item.id,
+      full_name: item.id,
+      comment: item.l2_desc,
+      called_functions: item.l1_deps,
+      signature: null,
+      select_from: null
+    };
+
+    // Вызываем анализ через Gemini
+    const result = await analyzeLogicWithGemini(item.l0_code, metadata);
+
+    console.log(`[API] Logic analysis completed for item: ${id}`);
+    res.json(result);
+  } catch (error) {
+    console.error('[API] Error analyzing logic:', error);
+    
+    // Проверяем тип ошибки для более информативного ответа
+    if (error.message && error.message.includes('Gemini SDK')) {
+      return res.status(500).json({
+        success: false,
+        error: 'Gemini SDK is not installed. Run: npm install @google/genai'
+      });
+    }
+    
+    if (error.message && error.message.includes('API_KEY')) {
+      return res.status(500).json({
+        success: false,
+        error: 'Gemini API Key is not configured. Set API_KEY environment variable.'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze logic: ' + error.message
+    });
+  }
 });
 
 // GET /api/stats - статистика для Dashboard

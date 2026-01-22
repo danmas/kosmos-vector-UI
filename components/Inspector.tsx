@@ -41,6 +41,7 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
   const [itemTags, setItemTags] = useState<import('../types').Tag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+  const [extractingColumns, setExtractingColumns] = useState(false);
 
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
@@ -144,6 +145,34 @@ const Inspector: React.FC<InspectorProps> = () => {
       }
     } finally {
       setLoadingTags(false);
+    }
+  };
+
+  // Функция извлечения колонок из SQL-функции
+  const handleExtractColumns = async () => {
+    if (!fullItemData || fullItemData.language !== 'sql') {
+      return;
+    }
+
+    setExtractingColumns(true);
+    try {
+      const response = await apiClient.extractColumns(fullItemData.id);
+      if (response.success) {
+        const report = response.report;
+        const message = `Извлечено колонок: ${report.columnsFound}\n` +
+          `Резолвлено: ${report.columnsResolved}\n` +
+          `Нерезолвлено: ${report.columnsUnresolved}\n` +
+          `Создано связей: ${report.linksCreated}`;
+        alert(message);
+        console.log('Column extraction result:', report);
+      } else {
+        alert('Ошибка при извлечении колонок');
+      }
+    } catch (err) {
+      console.error('Failed to extract columns:', err);
+      alert(err instanceof Error ? err.message : 'Ошибка при извлечении колонок');
+    } finally {
+      setExtractingColumns(false);
     }
   };
 
@@ -541,6 +570,14 @@ const Inspector: React.FC<InspectorProps> = () => {
                     <span className={`text-xs px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider ${getBadgeColor(fullItemData.type)}`}>
                       {fullItemData.type}
                     </span>
+                    <button
+                      onClick={handleExtractColumns}
+                      disabled={extractingColumns || fullItemData.language !== 'sql'}
+                      className="text-xs bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-2 py-0.5 rounded transition-colors font-bold"
+                      title="Извлечь колонки таблиц из SQL-функции"
+                    >
+                      {extractingColumns ? '...' : 'EC'}
+                    </button>
                     <button
                       onClick={() => setIsTagsDialogOpen(true)}
                       className="text-xs bg-purple-600 hover:bg-purple-500 text-white px-2 py-0.5 rounded transition-colors font-bold"

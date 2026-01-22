@@ -379,6 +379,14 @@ export class ApiClient {
     });
   }
 
+  // POST /api/items/:id/extract-columns - извлечение колонок таблиц из SQL-функции
+  async extractColumns(itemId: string): Promise<import('../types').ColumnExtractionResponse> {
+    return this.request<import('../types').ColumnExtractionResponse>(
+      `/api/items/${encodeURIComponent(itemId)}/extract-columns`,
+      { method: 'POST' }
+    );
+  }
+
   // GET /api/stats - статистика для Dashboard
   async getStats(): Promise<DashboardStats> {
     return this.request<DashboardStats>('/api/stats');

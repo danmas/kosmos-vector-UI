@@ -406,3 +406,27 @@ export interface BulkTagsResponse {
     error: string;
   }[];
 }
+
+// ────────────────────────────────────── Column Extraction Types
+
+export interface ColumnInfo {
+  fullName: string;
+  operation: 'reads_column' | 'updates_column' | 'inserts_column';
+  resolved: boolean;
+}
+
+export interface ColumnExtractionReport {
+  functionFullName: string;
+  functionAiItemId: number;
+  columnsFound: number;
+  columnsResolved: number;
+  columnsUnresolved: number;
+  columnsAmbiguous?: number;
+  linksCreated: number;
+  columns: ColumnInfo[];
+}
+
+export interface ColumnExtractionResponse {
+  success: boolean;
+  report: ColumnExtractionReport;
+}

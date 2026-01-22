@@ -84,7 +84,7 @@ const LogicArchitectDialog: React.FC<LogicArchitectDialogProps> = ({ isOpen, onC
         s_name: item.id,
         full_name: item.id,
         comment: item.l2_desc,
-        called_functions: item.l1_deps
+        called_functions: item.l1_out
       };
       setInputText(JSON.stringify(metadata, null, 2));
       setGraph(null);

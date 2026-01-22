@@ -267,7 +267,7 @@ function validateItemsResponse(data: any, statusCode: number): ValidationResult 
     // Проверяем структуру первого элемента как пример
     if (data.length > 0) {
       const item = data[0];
-      const required = ['id', 'type', 'language', 'l0_code', 'l1_deps', 'l2_desc', 'filePath'];
+      const required = ['id', 'type', 'language', 'l0_code', 'l1_in', 'l1_out', 'l2_desc', 'filePath'];
       for (const field of required) {
         if (!item.hasOwnProperty(field)) {
           validation.errors.push(`AiItem missing required field: ${field}`);
@@ -275,8 +275,12 @@ function validateItemsResponse(data: any, statusCode: number): ValidationResult 
         }
       }
 
-      if (item.l1_deps && !Array.isArray(item.l1_deps)) {
-        validation.errors.push('AiItem l1_deps must be an array');
+      if (item.l1_in && !Array.isArray(item.l1_in)) {
+        validation.errors.push('AiItem l1_in must be an array');
+        validation.valid = false;
+      }
+      if (item.l1_out && !Array.isArray(item.l1_out)) {
+        validation.errors.push('AiItem l1_out must be an array');
         validation.valid = false;
       }
     }

@@ -14,7 +14,9 @@ export enum AiItemType {
   METHOD = 'method',
   MODULE = 'module',
   INTERFACE = 'interface', // For TS/Java
-  STRUCT = 'struct'        // For Go
+  STRUCT = 'struct',       // For Go
+  TABLE = 'table',         // SQL tables
+  TABLE_COLUMN = 'table_column' // SQL table columns
 }
 
 export interface AiItem {
@@ -22,7 +24,8 @@ export interface AiItem {
   type: AiItemType;
   language: Language;
   l0_code: string;
-  l1_deps: string[];
+  l1_in: string[];   // Входящие: кто вызывает этот элемент
+  l1_out: string[];  // Исходящие: что вызывает этот элемент
   l2_desc: string;
   filePath: string;
 }

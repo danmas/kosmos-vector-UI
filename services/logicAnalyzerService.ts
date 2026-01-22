@@ -72,7 +72,7 @@ export async function analyzeFunctionLogic(item: AiItem): Promise<LogicAnalysisR
     s_name: item.id,
     full_name: item.id,
     comment: item.l2_desc,
-    called_functions: item.l1_deps
+    called_functions: item.l1_out
   };
 
   const prompt = `

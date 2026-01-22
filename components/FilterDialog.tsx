@@ -17,6 +17,8 @@ const ALL_TYPES: { value: AiItemType; label: string; icon: string }[] = [
   { value: 'module', label: 'Модули', icon: '◈' },
   { value: 'interface', label: 'Интерфейсы', icon: 'I' },
   { value: 'struct', label: 'Структуры', icon: 'S' },
+  { value: 'table', label: 'Таблицы', icon: '▤' },
+  { value: 'table_column', label: 'Колонки таблиц', icon: '│' },
 ];
 
 const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {

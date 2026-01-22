@@ -826,7 +826,7 @@ export const getStatsWithFallback = async (): Promise<{ data: DashboardStats; is
       // Generate mock stats
       const mockStats: DashboardStats = {
         totalItems: MOCK_AI_ITEMS.length,
-        totalDeps: MOCK_AI_ITEMS.reduce((acc, item) => acc + item.l1_deps.length, 0),
+        totalDeps: MOCK_AI_ITEMS.reduce((acc, item) => acc + (item.l1_out?.length || 0), 0),
         averageDependencyDensity: '2.1',
         typeStats: [
           { name: 'Function', count: MOCK_AI_ITEMS.filter(i => i.type === 'function').length },
@@ -865,7 +865,7 @@ export const getGraphWithFallback = async (contextCode?: string): Promise<{ data
 
       const links: Array<{ source: string; target: string }> = [];
       MOCK_AI_ITEMS.forEach(source => {
-        source.l1_deps.forEach(targetId => {
+        (source.l1_out || []).forEach(targetId => {
           const target = MOCK_AI_ITEMS.find(t => t.id === targetId);
           if (target) {
             links.push({ source: source.id, target: target.id });

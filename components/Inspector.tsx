@@ -347,22 +347,17 @@ const Inspector: React.FC<InspectorProps> = () => {
     setFilteredItemIds(newIdsSet);
   }, [filteredItems, setFilteredItemIds]);
 
-  // Calculate Reverse Dependencies (Who uses me?)
-  // Используем itemsList для поиска, но для отображения нужны только id
-  const usedBy = useMemo(() => {
-    if (!fullItemData) return [];
-    return itemsList.filter(i => {
-      // Проверяем, есть ли в l1_deps выбранного элемента
-      return fullItemData.l1_deps.includes(i.id);
-    });
-  }, [fullItemData, itemsList]);
 
   const getBadgeColor = (type: string) => {
     switch (type) {
       case AiItemType.FUNCTION: return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
       case AiItemType.CLASS: return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50';
+      case AiItemType.METHOD: return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
+      case AiItemType.MODULE: return 'bg-teal-500/20 text-teal-400 border-teal-500/50';
       case AiItemType.INTERFACE: return 'bg-pink-500/20 text-pink-400 border-pink-500/50';
       case AiItemType.STRUCT: return 'bg-amber-500/20 text-amber-400 border-amber-500/50';
+      case AiItemType.TABLE: return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50';
+      case AiItemType.TABLE_COLUMN: return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50';
       default: return 'bg-slate-500/20 text-slate-400 border-slate-500/50';
     }
   };
@@ -631,7 +626,7 @@ const Inspector: React.FC<InspectorProps> = () => {
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto p-2 bg-slate-900">
               {activeTab === 'L0' && <L0SourceView item={fullItemData} />}
-              {activeTab === 'L1' && <L1ConnectivityView item={fullItemData} usedBy={usedBy} onItemSelect={setSelectedId} />}
+              {activeTab === 'L1' && <L1ConnectivityView item={fullItemData} onItemSelect={setSelectedId} />}
               {activeTab === 'L2' && <L2SemanticsView item={fullItemData} />}
             </div>
           </>

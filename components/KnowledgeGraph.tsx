@@ -418,8 +418,25 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         return graphRegex.test(node.id);
       }
 
-      // Если есть явно установленный фильтр filteredItemIds (например, Alt+клик)
-      if (filteredItemIds.size > 0) {
+      // Фильтр по типам (если включён) — применяем ВСЕГДА
+      if (typeFilterEnabled && selectedTypes.size > 0) {
+        if (!selectedTypes.has(node.type)) {
+          return false;
+        }
+      }
+
+      // Фильтр по тегам (если включён) — применяем ВСЕГДА
+      if (tagFilterEnabled && selectedTagCodes.size > 0) {
+        const nodeTags = itemTagsMap.get(node.id);
+        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
+          return false;
+        }
+      }
+
+      // Если есть явно установленный фильтр filteredItemIds (Alt+клик или поиск в Inspector)
+      // Проверяем ПОСЛЕ фильтра по типам/тегам
+      // Игнорируем если это "полный" набор (все элементы из Inspector без фильтрации)
+      if (filteredItemIds.size > 0 && filteredItemIds.size < graphData.nodes.length) {
         return filteredItemIds.has(node.id);
       }
 
@@ -427,21 +444,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       if (inspectorSearch.trim()) {
         // Проверяем по Regex
         return inspectorRegex && inspectorRegex.test(node.id);
-      }
-
-      // Фильтр по типам (если включён)
-      if (typeFilterEnabled && selectedTypes.size > 0) {
-        if (!selectedTypes.has(node.type)) {
-          return false;
-        }
-      }
-
-      // Фильтр по тегам (если включён)
-      if (tagFilterEnabled && selectedTagCodes.size > 0) {
-        const nodeTags = itemTagsMap.get(node.id);
-        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
-          return false;
-        }
       }
 
       // Если фильтров нет вообще - показываем всё
@@ -633,8 +635,11 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           case AiItemType.FUNCTION: return "#3b82f6"; // blue
           case AiItemType.CLASS: return "#10b981"; // emerald
           case AiItemType.METHOD: return "#a855f7"; // purple
+          case AiItemType.MODULE: return "#14b8a6"; // teal
           case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
           case AiItemType.INTERFACE: return "#ec4899"; // pink
+          case AiItemType.TABLE: return "#06b6d4"; // cyan
+          case AiItemType.TABLE_COLUMN: return "#6366f1"; // indigo
           default: return "#64748b";
         }
       })
@@ -999,8 +1004,11 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Func</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Class</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Method</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-teal-500"></div> Module</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Struct</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-pink-500"></div> Interface</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-500"></div> Table</div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Column</div>
         </div>
       </div>
       <div className="flex-1 flex overflow-hidden relative">

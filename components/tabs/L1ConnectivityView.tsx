@@ -1,24 +1,23 @@
 import React from 'react';
-import { AiItem, AiItemSummary } from '../../types';
+import { AiItem } from '../../types';
 
 interface L1ConnectivityViewProps {
   item: AiItem;
-  usedBy: AiItemSummary[];
   onItemSelect?: (id: string) => void;
 }
 
-const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, usedBy, onItemSelect }) => {
+const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, onItemSelect }) => {
   return (
     <div className="grid grid-cols-2 gap-2 h-full">
-      {/* Dependencies */}
+      {/* Dependencies (Outgoing) */}
       <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
         <h3 className="text-purple-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
           Dependencies 
-          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{item.l1_deps.length}</span>
+          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{item.l1_out.length}</span>
         </h3>
         <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
-          {item.l1_deps.length > 0 ? (
-            item.l1_deps.map((dep, idx) => {
+          {item.l1_out.length > 0 ? (
+            item.l1_out.map((dep, idx) => {
               // Проверяем, является ли dep JSON-строкой
               let formattedDep: string = dep;
               let isJson = false;
@@ -35,6 +34,7 @@ const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, usedBy, o
               return (
                 <div 
                   key={`${dep}-${idx}`} 
+                  onClick={() => !isJson && onItemSelect?.(dep)}
                   className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer group"
                 >
                   {isJson ? (
@@ -62,21 +62,21 @@ const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, usedBy, o
         </div>
       </div>
 
-      {/* Used By */}
+      {/* Used By (Incoming) */}
       <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
         <h3 className="text-emerald-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
           Used By 
-          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{usedBy.length}</span>
+          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{item.l1_in.length}</span>
         </h3>
         <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
-          {usedBy.length > 0 ? (
-            usedBy.map(u => (
+          {item.l1_in.length > 0 ? (
+            item.l1_in.map(source => (
               <div 
-                key={u.id} 
-                onClick={() => onItemSelect?.(u.id)} 
+                key={source} 
+                onClick={() => onItemSelect?.(source)} 
                 className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer flex justify-between group"
               >
-                <span className="text-slate-300 font-mono break-all pr-1">{u.id}</span>
+                <span className="text-slate-300 font-mono break-all pr-1">{source}</span>
                 <span className="text-slate-500 group-hover:text-blue-400 shrink-0">←</span>
               </div>
             ))
@@ -90,4 +90,3 @@ const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, usedBy, o
 };
 
 export default L1ConnectivityView;
-

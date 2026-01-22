@@ -623,39 +623,79 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         }
       });
 
-    // Node Circles
+    // Node Shapes - используем разные формы для разных типов
     // 5 уровней жёлтого: от яркого (последний клик) до бледного
     const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
 
-    node.append("circle")
-      .attr("r", 20)
-      .attr("fill", (d: any) => {
-        // Оригинальная логика по типу
-        switch (d.type) {
-          case AiItemType.FUNCTION: return "#3b82f6"; // blue
-          case AiItemType.CLASS: return "#10b981"; // emerald
-          case AiItemType.METHOD: return "#a855f7"; // purple
-          case AiItemType.MODULE: return "#14b8a6"; // teal
-          case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
-          case AiItemType.INTERFACE: return "#ec4899"; // pink
-          case AiItemType.TABLE: return "#06b6d4"; // cyan
-          case AiItemType.TABLE_COLUMN: return "#6366f1"; // indigo
-          default: return "#64748b";
-        }
-      })
-      .attr("stroke", (d: any) => {
-        // Проверяем историю кликов для обводки
-        const historyIndex = clickHistory.indexOf(d.id);
-        if (historyIndex !== -1) {
-          return yellowShades[historyIndex];
-        }
-        return "#1e293b";
-      })
-      .attr("stroke-width", (d: any) => {
-        // Увеличиваем толщину обводки для узлов из истории
-        const historyIndex = clickHistory.indexOf(d.id);
-        return historyIndex !== -1 ? 4 : 2;
-      });
+    // Функция для получения цвета по типу
+    const getNodeColor = (type: string) => {
+      switch (type) {
+        case AiItemType.FUNCTION: return "#3b82f6"; // blue
+        case AiItemType.CLASS: return "#10b981"; // emerald
+        case AiItemType.METHOD: return "#a855f7"; // purple
+        case AiItemType.MODULE: return "#14b8a6"; // teal
+        case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
+        case AiItemType.INTERFACE: return "#ec4899"; // pink
+        case AiItemType.TABLE: return "#06b6d4"; // cyan
+        case AiItemType.TABLE_COLUMN: return "#6366f1"; // indigo
+        default: return "#64748b";
+      }
+    };
+
+    // Функция для получения цвета обводки
+    const getStrokeColor = (nodeId: string) => {
+      const historyIndex = clickHistory.indexOf(nodeId);
+      if (historyIndex !== -1) {
+        return yellowShades[historyIndex];
+      }
+      return "#1e293b";
+    };
+
+    // Функция для получения толщины обводки
+    const getStrokeWidth = (nodeId: string) => {
+      const historyIndex = clickHistory.indexOf(nodeId);
+      return historyIndex !== -1 ? 4 : 2;
+    };
+
+    // Создаём узлы с разными формами в зависимости от типа
+    node.each(function(d: any) {
+      const el = d3.select(this);
+      const fillColor = getNodeColor(d.type);
+      const strokeColor = getStrokeColor(d.id);
+      const strokeWidth = getStrokeWidth(d.id);
+
+      if (d.type === AiItemType.TABLE) {
+        // Таблицы - квадратики
+        const size = 40; // размер квадрата (диаметр круга был 40)
+        el.append("rect")
+          .attr("width", size)
+          .attr("height", size)
+          .attr("x", -size / 2)
+          .attr("y", -size / 2)
+          .attr("fill", fillColor)
+          .attr("stroke", strokeColor)
+          .attr("stroke-width", strokeWidth);
+      } else if (d.type === AiItemType.TABLE_COLUMN) {
+        // Колонки - прямоугольники (ширина как у узлов, высота 1/3)
+        const width = 40;
+        const height = width / 3; // примерно 13.33
+        el.append("rect")
+          .attr("width", width)
+          .attr("height", height)
+          .attr("x", -width / 2)
+          .attr("y", -height / 2)
+          .attr("fill", fillColor)
+          .attr("stroke", strokeColor)
+          .attr("stroke-width", strokeWidth);
+      } else {
+        // Остальные типы - круги
+        el.append("circle")
+          .attr("r", 20)
+          .attr("fill", fillColor)
+          .attr("stroke", strokeColor)
+          .attr("stroke-width", strokeWidth);
+      }
+    });
 
     // Labels
     node.append("text")

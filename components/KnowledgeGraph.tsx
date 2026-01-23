@@ -418,25 +418,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         return graphRegex.test(node.id);
       }
 
-      // Фильтр по типам (если включён) — применяем ВСЕГДА
-      if (typeFilterEnabled && selectedTypes.size > 0) {
-        if (!selectedTypes.has(node.type)) {
-          return false;
-        }
-      }
-
-      // Фильтр по тегам (если включён) — применяем ВСЕГДА
-      if (tagFilterEnabled && selectedTagCodes.size > 0) {
-        const nodeTags = itemTagsMap.get(node.id);
-        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
-          return false;
-        }
-      }
-
-      // Если есть явно установленный фильтр filteredItemIds (Alt+клик или поиск в Inspector)
-      // Проверяем ПОСЛЕ фильтра по типам/тегам
-      // Игнорируем если это "полный" набор (все элементы из Inspector без фильтрации)
-      if (filteredItemIds.size > 0 && filteredItemIds.size < graphData.nodes.length) {
+      // Если есть явно установленный фильтр filteredItemIds (например, Alt+клик)
+      if (filteredItemIds.size > 0) {
         return filteredItemIds.has(node.id);
       }
 
@@ -444,6 +427,21 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       if (inspectorSearch.trim()) {
         // Проверяем по Regex
         return inspectorRegex && inspectorRegex.test(node.id);
+      }
+
+      // Фильтр по типам (если включён)
+      if (typeFilterEnabled && selectedTypes.size > 0) {
+        if (!selectedTypes.has(node.type)) {
+          return false;
+        }
+      }
+
+      // Фильтр по тегам (если включён)
+      if (tagFilterEnabled && selectedTagCodes.size > 0) {
+        const nodeTags = itemTagsMap.get(node.id);
+        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
+          return false;
+        }
       }
 
       // Если фильтров нет вообще - показываем всё
@@ -549,17 +547,19 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .attr("stroke-width", 1.5)
       .attr("marker-end", "url(#arrowhead)");
 
-    // Draw link labels (if label exists)
+    // Draw link labels (use label or type from backend)
+    // Бэкенд теперь передаёт реальные типы связей: calls, reads_from, updates и т.д.
+    const getLinkLabel = (d: any) => d.label || d.type || '';
     const linkLabels = container.append("g")
       .selectAll("text")
-      .data(links.filter((d: any) => d.label))
+      .data(links.filter((d: any) => getLinkLabel(d).length > 0))
       .join("text")
       .attr("fill", "#94a3b8")
       .attr("font-size", "11px")
       .attr("text-anchor", "middle")
       .attr("pointer-events", "none")
       .style("pointer-events", "none")
-      .text((d: any) => d.label);
+      .text((d: any) => getLinkLabel(d));
 
     // Draw Nodes inside container
     const node = container.append("g")
@@ -729,24 +729,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           }
         }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
       })
-      .on("mousemove", (event: any, d: any) => {
-        // Сбрасываем таймер при любом движении мыши — tooltip появится только при неподвижной мыши
-        if (tooltipTimeoutRef.current) {
-          clearTimeout(tooltipTimeoutRef.current);
-        }
-        const clientX = event.clientX;
-        const clientY = event.clientY;
-        tooltipTimeoutRef.current = setTimeout(() => {
-          const svgRect = svgRef.current?.getBoundingClientRect();
-          if (svgRect) {
-            setTooltip({
-              node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
-              x: clientX - svgRect.left + 20,
-              y: clientY - svgRect.top - 10
-            });
-          }
-        }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
-      })
       .on("mouseleave", () => {
         // Очищаем timeout при уходе курсора — tooltip не появится если ушли раньше
         if (tooltipTimeoutRef.current) {
@@ -861,12 +843,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     });
 
     function dragstarted(event: any, d: any) {
-      // Сбрасываем таймер tooltip при начале перетаскивания
-      if (tooltipTimeoutRef.current) {
-        clearTimeout(tooltipTimeoutRef.current);
-        tooltipTimeoutRef.current = null;
-      }
-
       if (!event.active) simulation.alphaTarget(0.3).restart();
 
       // Convert screen coordinates to graph coordinates considering zoom/pan
@@ -879,12 +855,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
 
     function dragged(event: any, d: any) {
-      // Сбрасываем таймер tooltip при перетаскивании
-      if (tooltipTimeoutRef.current) {
-        clearTimeout(tooltipTimeoutRef.current);
-        tooltipTimeoutRef.current = null;
-      }
-
       // Convert screen coordinates to graph coordinates considering zoom/pan
       const pointer = d3.pointer(event, container.node());
       d.fx = pointer[0];
@@ -1044,11 +1014,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Func</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Class</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Method</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-teal-500"></div> Module</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Struct</div>
           <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-pink-500"></div> Interface</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-500"></div> Table</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Column</div>
         </div>
       </div>
       <div className="flex-1 flex overflow-hidden relative">

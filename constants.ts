@@ -49,7 +49,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'python',
     filePath: 'backend/parser.py',
     l0_code: 'def parse_file(path):\n    with open(path) as f:\n        tree = ast.parse(f.read())\n    return tree',
-    l1_in: ['main.run_pipeline'],
+    l1_in: [{ source: 'main.run_pipeline', type: 'calls' }],
     l1_out: [],
     l2_desc: 'Parses a single Python file into an AST object.'
   },
@@ -59,7 +59,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'python',
     filePath: 'ai_item/core.py',
     l0_code: 'class AiItem:\n    def __init__(self, id, type):\n        self.id = id\n        self.type = type',
-    l1_in: ['generator.generate_l2', 'graph.build_graph'],
+    l1_in: [{ source: 'generator.generate_l2', type: 'imports' }, { source: 'graph.build_graph', type: 'imports' }],
     l1_out: [],
     l2_desc: 'Base class representing an atomic unit of knowledge in the codebase.'
   },
@@ -69,8 +69,8 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'python',
     filePath: 'ai_item/generator.py',
     l0_code: 'def generate_l2(item):\n    prompt = f"Describe {item.l0}"\n    return llm.invoke(prompt)',
-    l1_in: ['main.run_pipeline'],
-    l1_out: ['core.AiItem', 'utils.llm_client'],
+    l1_in: [{ source: 'main.run_pipeline', type: 'calls' }],
+    l1_out: [{ target: 'core.AiItem', type: 'imports' }, { target: 'utils.llm_client', type: 'calls' }],
     l2_desc: 'Generates the L2 semantic description for an AiItem using an external LLM.'
   },
   {
@@ -79,8 +79,8 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'python',
     filePath: 'ai_item/graph.py',
     l0_code: 'def build_graph(items):\n    G = nx.DiGraph()\n    for item in items:\n        G.add_node(item.id)\n    return G',
-    l1_in: ['main.run_pipeline'],
-    l1_out: ['core.AiItem'],
+    l1_in: [{ source: 'main.run_pipeline', type: 'calls' }],
+    l1_out: [{ target: 'core.AiItem', type: 'imports' }],
     l2_desc: 'Constructs a NetworkX directed graph from a list of AiItems.'
   },
   {
@@ -90,7 +90,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     filePath: 'backend/main.py',
     l0_code: 'def run_pipeline(path):\n    items = parser.parse_file(path)\n    enriched = generator.generate_l2(items)\n    graph.build_graph(enriched)',
     l1_in: [],
-    l1_out: ['parser.parse_file', 'generator.generate_l2', 'graph.build_graph'],
+    l1_out: [{ target: 'parser.parse_file', type: 'calls' }, { target: 'generator.generate_l2', type: 'calls' }, { target: 'graph.build_graph', type: 'calls' }],
     l2_desc: 'Orchestrates the entire RAG extraction pipeline from parsing to graph construction.'
   },
   {
@@ -99,7 +99,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'python',
     filePath: 'backend/utils.py',
     l0_code: 'def llm_client(prompt):\n    return requests.post(API_URL, json={"prompt": prompt})',
-    l1_in: ['generator.generate_l2'],
+    l1_in: [{ source: 'generator.generate_l2', type: 'calls' }],
     l1_out: [],
     l2_desc: 'Helper function to communicate with the LLM API.'
   },
@@ -111,7 +111,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     filePath: 'frontend/App.tsx',
     l0_code: 'const App: React.FC = () => {\n  useEffect(() => { api.fetchData(); }, []);\n  return <div>AiItem Dashboard</div>;\n};',
     l1_in: [],
-    l1_out: ['api.fetchData'],
+    l1_out: [{ target: 'api.fetchData', type: 'calls' }],
     l2_desc: 'Main React component entry point that triggers initial data fetching.'
   },
   {
@@ -120,7 +120,7 @@ export const MOCK_AI_ITEMS: AiItem[] = [
     language: 'typescript',
     filePath: 'frontend/api.ts',
     l0_code: 'export const fetchData = async () => {\n  const res = await fetch("/api/graph");\n  return res.json();\n};',
-    l1_in: ['App.render'],
+    l1_in: [{ source: 'App.render', type: 'calls' }],
     l1_out: [],
     l2_desc: 'Asynchronous utility to fetch graph data from the backend.'
   },

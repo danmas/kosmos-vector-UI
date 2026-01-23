@@ -67,12 +67,17 @@ const RESPONSE_SCHEMA = {
  */
 export async function analyzeFunctionLogic(item: AiItem): Promise<LogicAnalysisResponse> {
   // Формируем FunctionMetadata из AiItem
+  // Извлекаем target из l1_out (теперь это массив объектов {target, type})
+  const calledFunctions = item.l1_out.map(link => 
+    typeof link === 'string' ? link : link.target
+  );
+  
   const metadata: FunctionMetadata = {
     body: item.l0_code,
     s_name: item.id,
     full_name: item.id,
     comment: item.l2_desc,
-    called_functions: item.l1_out
+    called_functions: calledFunctions
   };
 
   const prompt = `

@@ -19,13 +19,39 @@ export enum AiItemType {
   TABLE_COLUMN = 'table_column' // SQL table columns
 }
 
+// ────────────────────────────────────── L1 Link Types
+
+/** Типы связей L1 */
+export type L1LinkType = 
+  | 'calls'           // Вызов функции
+  | 'reads_from'      // Чтение из таблицы (SELECT)
+  | 'updates'         // Обновление таблицы (UPDATE)
+  | 'inserts_into'    // Вставка в таблицу (INSERT)
+  | 'reads_column'    // Чтение колонки
+  | 'updates_column'  // Обновление колонки
+  | 'inserts_column'  // Вставка в колонку
+  | 'imports'         // Импорт модуля
+  | 'depends_on';     // Общая зависимость (fallback)
+
+/** Входящая связь L1: кто вызывает/использует этот элемент */
+export interface L1LinkIn {
+  source: string;
+  type: L1LinkType;
+}
+
+/** Исходящая связь L1: что вызывает/использует этот элемент */
+export interface L1Link {
+  target: string;
+  type: L1LinkType;
+}
+
 export interface AiItem {
   id: string;
   type: AiItemType;
   language: Language;
   l0_code: string;
-  l1_in: string[];   // Входящие: кто вызывает этот элемент
-  l1_out: string[];  // Исходящие: что вызывает этот элемент
+  l1_in: L1LinkIn[];   // Входящие: кто вызывает этот элемент (с типом связи)
+  l1_out: L1Link[];    // Исходящие: что вызывает этот элемент (с типом связи)
   l2_desc: string;
   filePath: string;
 }

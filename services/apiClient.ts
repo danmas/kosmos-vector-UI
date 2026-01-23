@@ -863,12 +863,15 @@ export const getGraphWithFallback = async (contextCode?: string): Promise<{ data
         l2_desc: item.l2_desc
       }));
 
-      const links: Array<{ source: string; target: string }> = [];
+      const links: Array<{ source: string; target: string; label?: string }> = [];
       MOCK_AI_ITEMS.forEach(source => {
-        (source.l1_out || []).forEach(targetId => {
+        (source.l1_out || []).forEach(link => {
+          // Поддержка нового формата (объект с target и type) и старого (строка)
+          const targetId = typeof link === 'string' ? link : link.target;
+          const linkType = typeof link === 'string' ? undefined : link.type;
           const target = MOCK_AI_ITEMS.find(t => t.id === targetId);
           if (target) {
-            links.push({ source: source.id, target: target.id });
+            links.push({ source: source.id, target: target.id, label: linkType });
           }
         });
       });

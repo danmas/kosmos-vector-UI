@@ -403,8 +403,56 @@ const Inspector: React.FC<InspectorProps> = () => {
               )}
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <div className="flex-1 relative">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setIsQueryDialogOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title="Natural Language Query"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Query
+              </button>
+              <button
+                onClick={() => setIsFilterDialogOpen(true)}
+                className={`text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0 ${
+                  (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+                    ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                }`}
+                title="Фильтры по типам и тегам"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filter
+              </button>
+              <button
+                onClick={() => {
+                  setIsTagsDialogOpen(true);
+                  setSelectedId('bulk-add'); // Специальный ID для режима массового добавления
+                }}
+                disabled={filteredItems.length === 0}
+                className="bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title={`Добавить теги ко всем отфильтрованным элементам (${filteredItems.length})`}
+              >
+                T+
+              </button>
+              <button
+                onClick={() => {
+                  setIsTagsDialogOpen(true);
+                  setSelectedId('bulk-remove'); // Специальный ID для режима массового удаления
+                }}
+                disabled={filteredItems.length === 0}
+                className="bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title={`Удалить теги у всех отфильтрованных элементов (${filteredItems.length})`}
+              >
+                T-
+              </button>
+            </div>
+            <div className="relative">
               <input
                 type="text"
                 placeholder="Search ID or File... (/regex/)"
@@ -450,52 +498,6 @@ const Inspector: React.FC<InspectorProps> = () => {
                 </div>
               )}
             </div>
-            <button
-              onClick={() => setIsQueryDialogOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
-              title="Natural Language Query"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              Query
-            </button>
-            <button
-              onClick={() => setIsFilterDialogOpen(true)}
-              className={`text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0 ${
-                (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
-                  ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-              }`}
-              title="Фильтры по типам и тегам"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-              Filter
-            </button>
-            <button
-              onClick={() => {
-                setIsTagsDialogOpen(true);
-                setSelectedId('bulk-add'); // Специальный ID для режима массового добавления
-              }}
-              disabled={filteredItems.length === 0}
-              className="bg-green-600 hover:bg-green-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
-              title={`Добавить теги ко всем отфильтрованным элементам (${filteredItems.length})`}
-            >
-              T+
-            </button>
-            <button
-              onClick={() => {
-                setIsTagsDialogOpen(true);
-                setSelectedId('bulk-remove'); // Специальный ID для режима массового удаления
-              }}
-              disabled={filteredItems.length === 0}
-              className="bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
-              title={`Удалить теги у всех отфильтрованных элементов (${filteredItems.length})`}
-            >
-              T-
-            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">

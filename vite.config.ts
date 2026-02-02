@@ -6,6 +6,7 @@ const backendPort = process.env.PORT_DATA_SERVER || 3200;
 export default defineConfig({
   plugins: [react()],
   server: {
+    port: Number(process.env.PORT) || 5173,
     proxy: {
       '/api': {
         target: `http://localhost:${backendPort}`,

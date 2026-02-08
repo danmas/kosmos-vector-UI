@@ -471,3 +471,125 @@ export interface ColumnExtractionResponse {
   success: boolean;
   report: ColumnExtractionReport;
 }
+
+// ────────────────────────────────────── RAG Types (v2.7.0)
+
+export type RAGStrategy = 'simple' | 'hierarchical' | 'aiitem' | 'hybrid';
+export type ChunkLevel = '0-исходник' | '1-связи' | '2-логика';
+export type FormattingStyle = 'compact' | 'standard' | 'full' | 'markdown';
+
+export interface RAGFormattingConfig {
+  style?: FormattingStyle;
+  includeFileNames?: boolean;
+  includeRelations?: boolean;
+  maxTokens?: number;
+}
+
+export interface RAGRetrieveRequest {
+  query: string;
+  contextCode: string;
+  strategy?: RAGStrategy;
+  maxChunks?: number;
+  levels?: ChunkLevel[];
+  includeRelations?: boolean;
+  formatting?: RAGFormattingConfig;
+}
+
+export interface ContextSection {
+  aiItem?: {
+    id: string;
+    type: string;
+    full_name: string;
+  };
+  source?: {
+    id: string;
+    content: string;
+    level: string;
+  };
+  description?: {
+    id: string;
+    content: string;
+    level: string;
+  };
+  dependencies?: Array<{
+    id: string;
+    content: string;
+    level: string;
+  }>;
+  relations?: Array<{
+    target: string;
+    type: string;
+  }>;
+}
+
+export interface RAGContextMetadata {
+  totalChunks: number;
+  totalTokens: number;
+  usedChunkIds: string[];
+  strategy: RAGStrategy;
+  formattingStyle: FormattingStyle;
+}
+
+export interface RAGRetrieveResponse {
+  success: boolean;
+  context: {
+    formatted: string;
+    sections: ContextSection[];
+    metadata: RAGContextMetadata;
+  };
+  retrievalTime: number;
+  timestamp: string;
+}
+
+export interface RAGAskRequest {
+  query: string;
+  contextCode: string;
+  ragConfig?: Partial<RAGRetrieveRequest>;
+  llmConfig?: {
+    model?: string;
+    temperature?: number;
+    systemPrompt?: string;
+  };
+}
+
+export interface RAGAskResponse {
+  success: boolean;
+  answer: string;
+  context: RAGContextMetadata;
+  retrievalTime: number;
+  timestamp: string;
+}
+
+export interface StrategyInfo {
+  name: string;
+  description: string;
+  useCases: string[];
+  performance: 'Высокая' | 'Средняя' | 'Низкая';
+  complexity: 'Низкая' | 'Средняя' | 'Высокая';
+}
+
+export interface StrategiesResponse {
+  success: boolean;
+  strategies: StrategyInfo[];
+}
+
+export interface CompareStrategiesRequest {
+  query: string;
+  contextCode: string;
+  strategies?: RAGStrategy[];
+  maxChunks?: number;
+}
+
+export interface CompareStrategiesResult {
+  strategy: string;
+  totalChunks: number;
+  totalTokens: number;
+  retrievalTime: number;
+  chunksPreview: any[];
+}
+
+export interface CompareStrategiesResponse {
+  success: boolean;
+  results: CompareStrategiesResult[];
+  timestamp: string;
+}

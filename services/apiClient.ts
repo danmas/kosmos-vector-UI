@@ -1,4 +1,4 @@
-import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse, AiCommentResponse, BulkTagsResponse } from '../types';
+import { AiItem, AiItemSummary, ChatMessage, ProjectFile, KnowledgeBaseConfig, FileSelectionRequest, LogicAnalysisResponse, LogicGraphResponse, AiCommentResponse, BulkTagsResponse, RAGRetrieveRequest, RAGRetrieveResponse, RAGAskRequest, RAGAskResponse, CompareStrategiesRequest, CompareStrategiesResponse, StrategiesResponse } from '../types';
 import { MOCK_AI_ITEMS } from '../constants';
 import { validateApiResponse, ValidationResult } from './contractValidator';
 import { uiLogger } from './uiLogger';
@@ -749,6 +749,48 @@ export class ApiClient {
       body: JSON.stringify({ itemIds, tagCodes })
     });
     return response as BulkTagsResponse;
+  }
+
+  // ─────────────────── RAG API (v2.7.0) ───────────────────
+
+  /**
+   * POST /api/rag/retrieve - Получение структурированного контекста без LLM
+   */
+  async ragRetrieve(request: RAGRetrieveRequest): Promise<RAGRetrieveResponse> {
+    return this.request<RAGRetrieveResponse>('/api/rag/retrieve', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * POST /api/rag/ask - Полный RAG цикл с генерацией ответа LLM
+   */
+  async ragAsk(request: RAGAskRequest): Promise<RAGAskResponse> {
+    return this.request<RAGAskResponse>('/api/rag/ask', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * POST /api/rag/compare-strategies - Сравнение эффективности стратегий
+   */
+  async ragCompareStrategies(request: CompareStrategiesRequest): Promise<CompareStrategiesResponse> {
+    return this.request<CompareStrategiesResponse>('/api/rag/compare-strategies', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * GET /api/rag/strategies - Список доступных стратегий
+   */
+  async ragGetStrategies(): Promise<StrategiesResponse> {
+    return this.request<StrategiesResponse>('/api/rag/strategies');
   }
 
 }

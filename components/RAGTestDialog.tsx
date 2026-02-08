@@ -157,7 +157,26 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
 
       console.log('[RAGTestDialog] Received response:', response);
 
-      setResult(response);
+      // Проверяем структуру ответа
+      if (!response || !response.context || !response.context.metadata) {
+        throw new Error('Некорректный ответ от сервера: отсутствуют обязательные поля');
+      }
+
+      // Защита от undefined значений
+      const safeResponse = {
+        ...response,
+        context: {
+          ...response.context,
+          formatted: response.context.formatted || '',
+          sections: response.context.sections || [],
+          metadata: {
+            ...response.context.metadata,
+            usedChunkIds: response.context.metadata.usedChunkIds || [],
+          },
+        },
+      };
+
+      setResult(safeResponse);
       setActiveTab('result');
     } catch (err) {
       console.error('[RAGTestDialog] RAG retrieve error:', err);
@@ -170,6 +189,15 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
           message: err.message,
           stack: err.stack,
         });
+      } else if (typeof err === 'object' && err !== null) {
+        // Если это объект ошибки от API
+        const apiError = err as any;
+        if (apiError.message) {
+          errorMessage = apiError.message;
+        } else if (apiError.error) {
+          errorMessage = apiError.error;
+        }
+        console.error('[RAGTestDialog] API error object:', err);
       } else {
         console.error('[RAGTestDialog] Unknown error:', err);
       }

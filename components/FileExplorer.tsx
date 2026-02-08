@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FileNode, ProjectFile, KnowledgeBaseConfig } from '../types';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from '../services/apiClient';
 import { minimatch } from 'minimatch';
+import FileViewerDialog from './FileViewerDialog';
+import { useDataCache } from '../lib/context/DataCacheContext';
 
 interface FileExplorerProps {
   // Обратная совместимость
@@ -132,9 +134,13 @@ const FileTreeNode: React.FC<{
   checkedFiles: Set<string>;
   onToggleCheck: (filePath: string, checked: boolean, isDirectory: boolean) => void;
   ignorePatterns?: string[];
-}> = ({ node, depth, checkedFiles, onToggleCheck, ignorePatterns = [] }) => {
+  onFileDoubleClick?: (filePath: string, fileName: string) => void;
+  contextCode?: string;
+}> = ({ node, depth, checkedFiles, onToggleCheck, ignorePatterns = [], onFileDoubleClick, contextCode = 'KOSMOS-VECTOR' }) => {
   const nodeId = getNodeId(node);
   const isDir = isDirectory(node);
+  const [clickCount, setClickCount] = useState(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Проверяем, попадает ли папка в игнор
   const isIgnored = isDir && ignorePatterns.length > 0 && matchesPattern(nodeId, ignorePatterns, false);
@@ -161,13 +167,83 @@ const FileTreeNode: React.FC<{
     onToggleCheck(nodeId, shouldCheck, isDir);
   };
 
+  // Проверяем, является ли файл текстовым
+  const isTextFile = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const textExtensions = ['js', 'jsx', 'ts', 'tsx', 'py', 'go', 'java', 'md', 'txt', 'json', 'yaml', 'yml', 'xml', 'html', 'css', 'scss', 'env'];
+    return textExtensions.includes(ext);
+  };
+
+  // Обработчик клика на имя файла
+  const handleFileNameClick = () => {
+    if (isDir) {
+      toggleExpand();
+      return;
+    }
+
+    // Проверяем, является ли файл текстовым
+    if (!isTextFile(node.name)) {
+      return;
+    }
+
+    setClickCount(prev => prev + 1);
+
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+
+    clickTimerRef.current = setTimeout(() => {
+      if (clickCount + 1 === 2) {
+        // Двойной клик - открываем файл согласно настройкам
+        const fileOpenMode = import.meta.env.VITE_FILE_OPEN_MODE || 'window';
+        
+        if (fileOpenMode === 'dialog') {
+          // Открываем во встроенном диалоге
+          if (onFileDoubleClick) {
+            onFileDoubleClick(nodeId, node.name);
+          }
+        } else {
+          // Открываем в браузере (окно или вкладка) через file-viewer.html
+          const url = `/file-viewer.html?context-code=${encodeURIComponent(contextCode)}&path=${encodeURIComponent(nodeId)}`;
+          
+          if (fileOpenMode === 'window') {
+            // Открываем в новом окне с заданными размерами
+            window.open(url, '_blank', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
+          } else {
+            // Открываем в новой вкладке (tab)
+            window.open(url, '_blank');
+          }
+        }
+      }
+      setClickCount(0);
+    }, 300);
+  };
+
+  // Обработчик клика на иконку просмотра
+  const handleViewIconClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onFileDoubleClick) {
+      onFileDoubleClick(nodeId, node.name);
+    }
+  };
+
+  // Очистка таймера при размонтировании
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
+
   const nodeSize = getNodeSize(node);
   const sizeText = nodeSize > 0 ? ` (${(nodeSize / 1024).toFixed(1)}KB)` : '';
+  const canOpenFile = !isDir && isTextFile(node.name);
 
   return (
     <div className="select-none">
       <div 
-        className={`flex items-center py-0.5 hover:bg-slate-800 cursor-pointer`}
+        className={`flex items-center py-0.5 hover:bg-slate-800 cursor-pointer group`}
         style={{ paddingLeft: `${depth * 16}px` }}
       >
         <button onClick={toggleExpand} className="mr-1.5 w-3 text-slate-400 flex justify-center text-xs">
@@ -182,7 +258,14 @@ const FileTreeNode: React.FC<{
           className={`mr-1.5 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-offset-0 focus:ring-0 w-3.5 h-3.5 ${isIndeterminate ? 'opacity-70' : ''}`}
         />
         
-        <span className={`text-sm ${isDir ? 'font-bold text-slate-300' : 'text-slate-400'} ${node.error ? 'text-red-400 line-through' : ''}`}>
+        <span 
+          onClick={handleFileNameClick}
+          className={`text-sm ${
+            isDir ? 'font-bold text-slate-300' : canOpenFile ? 'text-slate-400 hover:text-blue-400' : 'text-slate-400'
+          } ${node.error ? 'text-red-400 line-through' : ''} ${
+            canOpenFile ? 'cursor-pointer' : ''
+          }`}
+        >
           {node.name}{sizeText} {node.error && `(${node.errorMessage || 'Access Denied'})`}
           {'language' in node && node.language && (
             <span className="ml-1 text-xs text-blue-400">[{node.language}]</span>
@@ -193,6 +276,20 @@ const FileTreeNode: React.FC<{
             </span>
           )}
         </span>
+        
+        {/* Иконка просмотра для текстовых файлов */}
+        {canOpenFile && (
+          <button
+            onClick={handleViewIconClick}
+            className="ml-2 text-slate-500 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
+            title="Открыть во встроенном просмотрщике"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          </button>
+        )}
       </div>
       
       {expanded && node.children && (
@@ -205,6 +302,8 @@ const FileTreeNode: React.FC<{
               checkedFiles={checkedFiles}
               onToggleCheck={onToggleCheck}
               ignorePatterns={ignorePatterns}
+              onFileDoubleClick={onFileDoubleClick}
+              contextCode={contextCode}
             />
           ))}
         </div>
@@ -223,6 +322,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   onStartProcessing,
   standalone = false
 }) => {
+  const { currentContextCode } = useDataCache();
+  
   // Состояние для обратной совместимости (legacy mode)
   const [mask, setMask] = useState('**/*.{py,js,ts,tsx,go,java}');
   const [ignore, setIgnore] = useState('**/tests/*, **/venv/*, **/node_modules/*, **/.cursor/**, **/.git/**, **/.vscode/**');
@@ -253,10 +354,36 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [settingsDialogValue, setSettingsDialogValue] = useState('');
 
+  // Состояние для открытых окон просмотра файлов
+  interface OpenFile {
+    id: string;
+    filePath: string;
+    fileName: string;
+  }
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+
   // Определяем, какие данные использовать в зависимости от режима
   const files = standalone ? projectFiles : (propsFiles || []);
   const isLoading = standalone ? isLoadingFiles : (propsIsLoading || false);
   const error = standalone ? filesError : propsError;
+
+  // Обработчик двойного клика по файлу
+  const handleFileDoubleClick = (filePath: string, fileName: string) => {
+    // Генерируем уникальный ID для окна
+    const fileId = `${filePath}-${Date.now()}`;
+    
+    setOpenFiles(prev => [
+      ...prev,
+      { id: fileId, filePath, fileName }
+    ]);
+    
+    console.log('[FileExplorer] Opening file:', filePath);
+  };
+
+  // Обработчик закрытия окна просмотра
+  const handleCloseFile = (fileId: string) => {
+    setOpenFiles(prev => prev.filter(f => f.id !== fileId));
+  };
 
   // v2.1.1: Загрузка KB конфигурации через новый API
   const loadKbConfigV2 = async () => {
@@ -968,6 +1095,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                   checkedFiles={checkedFiles}
                   onToggleCheck={handleToggleCheck}
                   ignorePatterns={ignorePatternsArray}
+                  onFileDoubleClick={handleFileDoubleClick}
+                  contextCode={currentContextCode || 'KOSMOS-VECTOR'}
                 />
               ));
             })()
@@ -1039,6 +1168,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
         </div>
       </div>
+
+      {/* Окна просмотра файлов */}
+      {openFiles.map((file) => (
+        <FileViewerDialog
+          key={file.id}
+          isOpen={true}
+          onClose={() => handleCloseFile(file.id)}
+          filePath={file.filePath}
+          fileName={file.fileName}
+        />
+      ))}
     </div>
   );
 };

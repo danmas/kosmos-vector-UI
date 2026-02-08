@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: #1e293b;
+            color: #e2e8f0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        .header {
+            background: #0f172a;
+            border-bottom: 2px solid #334155;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .file-icon {
+            font-size: 24px;
+        }
+        
+        .file-info h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 2px;
+        }
+        
+        .file-info .meta {
+            font-size: 11px;
+            color: #64748b;
+        }
+        
+        .language-badge {
+            display: inline-block;
+            background: #3b82f6;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 8px;
+        }
+        
+        .content-container {
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+            min-height: 0;
+        }
+        
+        pre {
+            margin: 0;
+            background: #0f172a !important;
+            border-radius: 8px;
+            padding: 16px !important;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        code {
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+        }
+        
+        .hljs {
+            background: #0f172a !important;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .spinner {
+            border: 3px solid #334155;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #7f1d1d;
+            border: 1px solid #991b1b;
+            color: #fca5a5;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <div class="file-icon">📄</div>
+            <div class="file-info">
+                <h1 id="fileName">Loading...</h1>
+                <div class="meta">
+                    <span id="filePath">...</span>
+                    <span id="languageBadge" class="language-badge" style="display: none;"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="content-container">
+        <div id="loading" class="loading">
+            <div>
+                <div class="spinner"></div>
+                <div>Loading file...</div>
+            </div>
+        </div>
+        <pre id="codeBlock" style="display: none;"><code id="code" class="hljs"></code></pre>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const contextCode = urlParams.get('context-code') || 'KOSMOS-VECTOR';
+        const filePath = urlParams.get('path') || '';
+        
+        // Extract file name from path
+        const fileName = filePath.split(/[/\\]/).pop() || 'Unknown File';
+        const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
+        
+        // Language map
+        const languageMap = {
+            'js': 'javascript',
+            'jsx': 'javascript',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'py': 'python',
+            'go': 'go',
+            'java': 'java',
+            'md': 'markdown',
+            'json': 'json',
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'xml': 'xml',
+            'html': 'html',
+            'css': 'css',
+            'scss': 'scss',
+            'txt': 'plaintext',
+            'env': 'bash',
+        };
+        
+        const language = languageMap[fileExt] || 'plaintext';
+        
+        // Update UI
+        document.getElementById('fileName').textContent = fileName;
+        document.getElementById('filePath').textContent = filePath;
+        document.title = `${fileName} - File Viewer`;
+        
+        if (language !== 'plaintext') {
+            const badge = document.getElementById('languageBadge');
+            badge.textContent = language;
+            badge.style.display = 'inline-block';
+        }
+        
+        // Load file content
+        async function loadFile() {
+            try {
+                const url = `/api/file-content?context-code=${encodeURIComponent(contextCode)}&path=${encodeURIComponent(filePath)}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load file: ${response.statusText}`);
+                }
+                
+                const content = await response.text();
+                
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                
+                // Show code
+                const codeElement = document.getElementById('code');
+                const codeBlock = document.getElementById('codeBlock');
+                
+                codeElement.textContent = content;
+                codeElement.className = `language-${language}`;
+                
+                // Apply syntax highlighting
+                hljs.highlightElement(codeElement);
+                
+                codeBlock.style.display = 'block';
+            } catch (err) {
+                console.error('Error loading file:', err);
+                
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                
+                // Show error
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = `Error: ${err.message}`;
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        // Start loading
+        loadFile();
+    </script>
+</body>
+</html>

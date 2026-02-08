@@ -2346,6 +2346,104 @@ app.get('/api/project/tree', (req, res) => {
   }
 });
 
+// GET /api/file-content - получить содержимое файла для просмотра
+app.get('/api/file-content', (req, res) => {
+  try {
+    const filePath = req.query.path;
+
+    if (!filePath || typeof filePath !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'path query parameter is required'
+      });
+    }
+
+    console.log(`[File Content API] GET /api/file-content - path: ${filePath}`);
+
+    // Получаем rootPath из текущей конфигурации
+    const rootPath = currentKbConfig.rootPath || PROJECT_ROOT;
+    console.log(`[File Content API] Root path: ${rootPath}`);
+    
+    // Определяем, является ли путь абсолютным
+    let absolutePath;
+    if (path.isAbsolute(filePath)) {
+      // Если путь уже абсолютный - используем его напрямую
+      absolutePath = filePath;
+      console.log(`[File Content API] Using absolute path: ${absolutePath}`);
+    } else {
+      // Если относительный - формируем абсолютный путь
+      absolutePath = path.resolve(rootPath, filePath);
+      console.log(`[File Content API] Resolved to absolute path: ${absolutePath}`);
+    }
+
+    // Проверяем, что файл находится внутри rootPath (безопасность)
+    const normalizedRootPath = path.normalize(rootPath);
+    const normalizedAbsolutePath = path.normalize(absolutePath);
+    console.log(`[File Content API] Normalized root: ${normalizedRootPath}`);
+    console.log(`[File Content API] Normalized absolute: ${normalizedAbsolutePath}`);
+    
+    if (!normalizedAbsolutePath.startsWith(normalizedRootPath)) {
+      console.error(`[File Content API] Access denied: ${absolutePath} is outside root path ${rootPath}`);
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied: file is outside project root'
+      });
+    }
+
+    // Проверяем существование файла
+    if (!fs.existsSync(absolutePath)) {
+      console.error(`[File Content API] File not found: ${absolutePath}`);
+      return res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
+
+    // Проверяем, что это файл, а не директория
+    const stats = fs.statSync(absolutePath);
+    if (!stats.isFile()) {
+      console.error(`[File Content API] Path is not a file: ${absolutePath}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Path is not a file'
+      });
+    }
+
+    // Проверяем размер файла (ограничение 5 МБ)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (stats.size > MAX_FILE_SIZE) {
+      return res.status(400).json({
+        success: false,
+        error: 'File too large (max 5 MB)'
+      });
+    }
+
+    // Читаем содержимое файла
+    const content = fs.readFileSync(absolutePath, 'utf8');
+    
+    console.log(`[File Content API] Successfully read file: ${filePath} (${stats.size} bytes)`);
+    
+    // Возвращаем содержимое как текст
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(content);
+  } catch (error) {
+    console.error(`[File Content API] Failed to read file:`, error);
+    
+    // Обработка ошибок кодировки
+    if (error.message.includes('Invalid') || error.message.includes('encoding')) {
+      return res.status(400).json({
+        success: false,
+        error: 'File encoding not supported (binary file?)'
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to read file: ' + error.message
+    });
+  }
+});
+
 // POST /api/project/selection - сохранить точную выборку файлов (v2.1.1)
 app.post('/api/project/selection', (req, res) => {
   try {

@@ -54,6 +54,7 @@ export interface AiItem {
   l1_out: L1Link[];    // Исходящие: что вызывает этот элемент (с типом связи)
   l2_desc: string;
   filePath: string;
+  isVectorized?: boolean;
 }
 
 export interface AiItemSummary {
@@ -62,6 +63,7 @@ export interface AiItemSummary {
   language: Language;
   filePath: string;
   tags?: TagSummary[]; // Теги элемента (опционально)
+  isVectorized?: boolean;
 }
 
 export interface FileNode {

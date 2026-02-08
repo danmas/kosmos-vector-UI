@@ -45,6 +45,8 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [extractingColumns, setExtractingColumns] = useState(false);
   const [vectorizing, setVectorizing] = useState(false);
   const [vectorizeProgress, setVectorizeProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [vectorizedItemIds, setVectorizedItemIds] = useState<Set<string>>(new Set());
+  const [vectorizingItemId, setVectorizingItemId] = useState<string | null>(null);
 
   const VECTORIZE_BATCH_SIZE = 5;
 
@@ -69,6 +71,7 @@ const Inspector: React.FC<InspectorProps> = () => {
     setSelectedId(null);
     setFullItemData(null);
     setItemsList([]); // Важно: очищаем список, чтобы старые элементы не проходили проверку
+    setVectorizedItemIds(new Set());
     
     const loadItemsList = async () => {
       console.log(`[Inspector] loadItemsList запущен для контекста: ${currentContextCode}`);
@@ -82,6 +85,7 @@ const Inspector: React.FC<InspectorProps> = () => {
           cacheAge: `${((Date.now() - cached.timestamp) / 1000).toFixed(1)}s`
         });
         setItemsList(cached.data);
+        setVectorizedItemIds(new Set(cached.data.filter((i: import('../types').AiItemSummary) => i.isVectorized).map((i: import('../types').AiItemSummary) => i.id)));
         setIsDemoMode(cached.isDemo);
         setDataSource('cache');
         setIsLoading(false);
@@ -109,6 +113,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         setCachedItemsList(result.data, result.isDemo);
 
         setItemsList(result.data);
+        setVectorizedItemIds(new Set(result.data.filter((i: import('../types').AiItemSummary) => i.isVectorized).map((i: import('../types').AiItemSummary) => i.id)));
         setIsDemoMode(result.isDemo);
         setDataSource('server');
         // Set first item as selected by default and load its full data
@@ -241,6 +246,7 @@ const Inspector: React.FC<InspectorProps> = () => {
       } else {
         const msg = `Векторизация выполнена: ${totalChunksUpdated} чанков обновлено`;
         uiLogger.logMessage('INFO', msg, { chunksUpdated: totalChunksUpdated, totalItems: fullNames.length });
+        setVectorizedItemIds(prev => new Set([...prev, ...fullNames]));
         alert(msg);
       }
     } catch (err) {
@@ -251,6 +257,27 @@ const Inspector: React.FC<InspectorProps> = () => {
     } finally {
       setVectorizing(false);
       setVectorizeProgress(null);
+    }
+  };
+
+  const handleVectorizeSingleItem = async (itemId: string) => {
+    setVectorizingItemId(itemId);
+    setError(null);
+    try {
+      const result = await apiClient.vectorizeAiItems({
+        fullNames: [itemId],
+        force: true,
+        contextCode: currentContextCode || undefined,
+      });
+      setVectorizedItemIds(prev => new Set([...prev, itemId]));
+      uiLogger.logMessage('INFO', `Векторизован: ${itemId} (${result.chunksUpdated} чанков)`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка векторизации';
+      uiLogger.logMessage('ERROR', `Ошибка векторизации ${itemId}: ${msg}`);
+      setError(msg);
+      alert(msg);
+    } finally {
+      setVectorizingItemId(null);
     }
   };
 
@@ -602,19 +629,36 @@ const Inspector: React.FC<InspectorProps> = () => {
                     {tag.name}
                   </span>
                 ))}
-                {/* Кнопка T для открытия диалога тегов */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectedIdContextRef.current = currentContextCode;
-                    setSelectedId(item.id);
-                    setIsTagsDialogOpen(true);
-                  }}
-                  className="text-[9px] bg-purple-600/80 hover:bg-purple-500 text-white px-1.5 py-0.5 rounded transition-colors font-bold ml-auto"
-                  title="Управление тегами"
-                >
-                  T
-                </button>
+                {/* Кнопки T и V справа */}
+                <div className="flex items-center gap-1 ml-auto">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectedIdContextRef.current = currentContextCode;
+                      setSelectedId(item.id);
+                      setIsTagsDialogOpen(true);
+                    }}
+                    className="text-[9px] bg-purple-600/80 hover:bg-purple-500 text-white px-1.5 py-0.5 rounded transition-colors font-bold"
+                    title="Управление тегами"
+                  >
+                    T
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleVectorizeSingleItem(item.id);
+                    }}
+                    disabled={vectorizingItemId === item.id || vectorizing}
+                    className={`text-[9px] px-1.5 py-0.5 rounded transition-colors font-bold ${
+                    vectorizedItemIds.has(item.id)
+                      ? 'bg-cyan-600/90 text-white'
+                      : 'bg-slate-600/60 hover:bg-cyan-600/70 text-slate-300 hover:text-white'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={vectorizedItemIds.has(item.id) ? 'Векторизован. Нажмите для перевекторизации' : 'Векторизовать'}
+                  >
+                    V
+                  </button>
+                </div>
               </div>
 
             </div>

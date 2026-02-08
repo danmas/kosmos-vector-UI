@@ -3995,7 +3995,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
-  /api/files/vectorize-ai-items:
+  /vectorize-ai-items:
     post:
       tags: [Chunks]
       summary: Векторизация ai_item по списку id или full_name

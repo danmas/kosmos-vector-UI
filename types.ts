@@ -254,6 +254,16 @@ export interface AiCommentResponse {
   updatedAt?: string | null;
 }
 
+// ────────────────────────────────────── Vectorize AI Items
+
+export interface VectorizeAiItemsResponse {
+  success: boolean;
+  totalItems: number;
+  chunksUpdated: number;
+  results?: { aiItemId: number; chunksUpdated: number }[];
+  errors?: { aiItemId: number; message: string }[];
+}
+
 // ────────────────────────────────────── Natural Query & Agent Script Types
 
 export interface NaturalQueryResponse {

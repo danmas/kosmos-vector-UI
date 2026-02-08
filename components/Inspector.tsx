@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AiItem, AiItemSummary, AiItemType } from '../types';
 import { getItemsListWithFallback, apiClient } from '../services/apiClient';
+import { uiLogger } from '../services/uiLogger';
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
@@ -42,6 +43,10 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [itemTags, setItemTags] = useState<import('../types').Tag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [extractingColumns, setExtractingColumns] = useState(false);
+  const [vectorizing, setVectorizing] = useState(false);
+  const [vectorizeProgress, setVectorizeProgress] = useState<{ processed: number; total: number } | null>(null);
+
+  const VECTORIZE_BATCH_SIZE = 5;
 
   // Храним предыдущий набор ID для сравнения
   const prevFilteredIdsRef = useRef<Set<string>>(new Set());
@@ -201,6 +206,52 @@ const Inspector: React.FC<InspectorProps> = () => {
       setCachedItemsList(updatedList, isDemoMode);
       return updatedList;
     });
+  };
+
+  const handleVectorize = async (force: boolean) => {
+    if (filteredItems.length === 0) return;
+    if (filteredItems.length > 5 && !confirm(`Векторизовать ${filteredItems.length} элементов? Это может занять несколько минут.`)) {
+      return;
+    }
+    const fullNames = filteredItems.map(item => item.id);
+    setVectorizing(true);
+    setError(null);
+    setVectorizeProgress({ processed: 0, total: fullNames.length });
+    uiLogger.logMessage('INFO', `Векторизация начата: ${fullNames.length} элементов (force=${force})`, { total: fullNames.length, force });
+    let totalChunksUpdated = 0;
+    const allErrors: { aiItemId: number; message: string }[] = [];
+    try {
+      for (let i = 0; i < fullNames.length; i += VECTORIZE_BATCH_SIZE) {
+        const batch = fullNames.slice(i, i + VECTORIZE_BATCH_SIZE);
+        const result = await apiClient.vectorizeAiItems({
+          fullNames: batch,
+          force,
+          contextCode: currentContextCode || undefined,
+        });
+        totalChunksUpdated += result.chunksUpdated;
+        if (result.errors?.length) allErrors.push(...result.errors);
+        const processed = Math.min(i + batch.length, fullNames.length);
+        setVectorizeProgress({ processed, total: fullNames.length });
+        uiLogger.logMessage('INFO', `Векторизация: ${processed} / ${fullNames.length}`, { processed, total: fullNames.length });
+      }
+      if (allErrors.length > 0) {
+        const msg = `Векторизация: ${totalChunksUpdated} чанков. Частичные ошибки: ${allErrors.map(e => e.message).join('; ')}`;
+        uiLogger.logMessage('WARN', msg, { chunksUpdated: totalChunksUpdated, errors: allErrors.length });
+        alert(msg);
+      } else {
+        const msg = `Векторизация выполнена: ${totalChunksUpdated} чанков обновлено`;
+        uiLogger.logMessage('INFO', msg, { chunksUpdated: totalChunksUpdated, totalItems: fullNames.length });
+        alert(msg);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка векторизации';
+      uiLogger.logMessage('ERROR', `Ошибка векторизации: ${msg}`);
+      setError(msg);
+      alert(msg);
+    } finally {
+      setVectorizing(false);
+      setVectorizeProgress(null);
+    }
   };
 
   // Функция загрузки полных данных элемента
@@ -451,7 +502,28 @@ const Inspector: React.FC<InspectorProps> = () => {
               >
                 T-
               </button>
+              <button
+                onClick={() => handleVectorize(false)}
+                disabled={filteredItems.length === 0 || vectorizing}
+                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title={`Векторизовать отфильтрованные (только без эмбеддингов) (${filteredItems.length})`}
+              >
+                V+
+              </button>
+              <button
+                onClick={() => handleVectorize(true)}
+                disabled={filteredItems.length === 0 || vectorizing}
+                className="bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title={`Перевекторизовать все отфильтрованные (${filteredItems.length})`}
+              >
+                V*
+              </button>
             </div>
+            {vectorizing && vectorizeProgress && (
+              <div className="text-xs text-cyan-400 animate-pulse">
+                Векторизация: {vectorizeProgress.processed} / {vectorizeProgress.total}...
+              </div>
+            )}
             <div className="relative">
               <input
                 type="text"

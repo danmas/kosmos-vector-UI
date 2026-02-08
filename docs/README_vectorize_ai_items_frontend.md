@@ -7,8 +7,7 @@
 ## URL и метод
 
 - **Метод:** `POST`
-- **Путь:** `/vectorize-ai-items`  
-  (в текущем сервере роуты файлов смонтированы в корне; при наличии префикса по контракту путь может быть `/api/files/vectorize-ai-items` — уточните у бэкенда.)
+- **Путь:** `/vectorize-ai-items`
 - **Content-Type:** `application/json`
 
 ---
@@ -179,4 +178,4 @@ if (result2.errors?.length) {
 - **По full_name:** в query обязательно `context-code`, body: `{ "fullNames": ["..."], "force": false }`.
 - **Перевекторизовать:** тот же запрос с `"force": true`.
 
-Полная спецификация: [docs/api-contract.yaml](api-contract.yaml), операция `vectorizeAiItems` (path `/api/files/vectorize-ai-items`).
+Полная спецификация: [docs/api-contract.yaml](api-contract.yaml), операция `vectorizeAiItems` (path `/vectorize-ai-items`).

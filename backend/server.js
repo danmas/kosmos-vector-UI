@@ -479,7 +479,7 @@ app.use((req, res, next) => {
     next();
   } else {
     // Логируем все остальные запросы как обычно
-    console.log(`${req.method} ${req.url}`);
+    // console.log(`${req.method} ${req.url}`); // Отключено: слишком много логов
     next();
   }
 });
@@ -872,13 +872,13 @@ app.delete('/api/vector-db', async (req, res) => {
 
 // GET /api/items - получение всех AiItem
 app.get('/api/items', (req, res) => {
-  console.log('[API] GET /api/items - Fetching all AiItems');
+  // console.log('[API] GET /api/items - Fetching all AiItems'); // Отключено
   res.json(MOCK_AI_ITEMS);
 });
 
 // GET /api/items-list - получение списка метаданных AiItem
 app.get('/api/items-list', (req, res) => {
-  console.log('[API] GET /api/items-list - Fetching items metadata');
+  // console.log('[API] GET /api/items-list - Fetching items metadata'); // Отключено
   const itemsList = MOCK_AI_ITEMS.map(item => ({
     id: item.id,
     type: item.type,
@@ -1234,7 +1234,7 @@ app.post('/api/items/:id/analyze-logic', async (req, res) => {
 
 // GET /api/stats - статистика для Dashboard
 app.get('/api/stats', (req, res) => {
-  console.log('[API] GET /api/stats - Computing dashboard statistics');
+  // console.log('[API] GET /api/stats - Computing dashboard statistics'); // Отключено
 
   const typeStats = [
     { name: 'Function', count: MOCK_AI_ITEMS.filter(i => i.type === AiItemType.FUNCTION).length },
@@ -1265,7 +1265,7 @@ app.get('/api/stats', (req, res) => {
 
 // GET /api/graph - данные для Knowledge Graph
 app.get('/api/graph', (req, res) => {
-  console.log('[API] GET /api/graph - Preparing graph data');
+  // console.log('[API] GET /api/graph - Preparing graph data'); // Отключено
 
   const nodes = MOCK_AI_ITEMS.map(item => ({
     id: item.id,

@@ -32,13 +32,20 @@ class UiLogger {
       [key: string]: any;
     }
   ) {
-    // Фильтруем частые polling запросы - не логируем успешные GET к /api/pipeline/steps/status
+    // Фильтруем частые запросы - не логируем успешные GET к часто вызываемым эндпоинтам
     const isPollingRequest = method === 'GET' && url.includes('/api/pipeline/steps/status');
+    const isFrequentGet = method === 'GET' && (
+      url.includes('/api/stats') ||
+      url.includes('/api/items-list') ||
+      url.includes('/api/graph')
+    );
     const isSuccess = !error && status !== undefined && status < 400;
-    
+
     if (isPollingRequest && isSuccess) {
-      // Не логируем успешные polling запросы
       return;
+    }
+    if (isFrequentGet && isSuccess) {
+      return; // Слишком много логов от Dashboard/Inspector/Graph
     }
     
     const timestamp = new Date().toISOString();
@@ -73,6 +80,29 @@ class UiLogger {
     };
     
     // Уведомляем всех подписчиков
+    this.listeners.forEach(listener => {
+      try {
+        listener(log);
+      } catch (err) {
+        console.error('[UiLogger] Error in listener:', err);
+      }
+    });
+  }
+
+  /**
+   * Логирование произвольного сообщения (прогресс, статус и т.д.)
+   */
+  logMessage(level: 'INFO' | 'WARN' | 'ERROR', message: string, details?: Record<string, any>) {
+    const timestamp = new Date().toISOString();
+    const id = `ui-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const log: ServerLog = {
+      id,
+      timestamp,
+      level,
+      message: `[UI] ${message}`,
+      source: 'UI',
+      details: details ? { ...details } : undefined
+    };
     this.listeners.forEach(listener => {
       try {
         listener(log);

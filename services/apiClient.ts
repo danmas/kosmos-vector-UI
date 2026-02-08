@@ -89,15 +89,7 @@ export class ApiClient {
       : `${baseForUrl}${endpoint}${separator}context-code=${encodeURIComponent(contextCode)}`;
     const method = options.method || 'GET';
 
-    // Логирование запроса
-    console.log('[ApiClient] Making request:', {
-      method,
-      url,
-      baseUrl: this.baseUrl || '(empty - using relative path)',
-      endpoint,
-      contextCode,
-      hasBody: !!options.body
-    });
+    // console.log('[ApiClient] Making request:', { method, url, ... }); // Отключено
 
     const config: RequestInit = {
       headers: {
@@ -113,15 +105,8 @@ export class ApiClient {
       const response = await fetch(url, config);
       const requestDuration = Date.now() - requestStartTime;
 
-      // Логирование ответа
       const contentType = response.headers.get('content-type');
-      console.log('[ApiClient] Response received:', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        contentType: contentType || '(not set)',
-        ok: response.ok
-      });
+      // console.log('[ApiClient] Response received:', { url, status, ... }); // Отключено
 
       // Собираем заголовки ответа
       const responseHeaders: Record<string, string> = {};
@@ -149,26 +134,13 @@ export class ApiClient {
       if (isJson) {
         try {
           responseData = await response.json();
-          // Логируем данные ответа для диагностики
-          console.log('[ApiClient] Response data:', {
-            url,
-            dataKeys: responseData && typeof responseData === 'object' && !Array.isArray(responseData)
-              ? Object.keys(responseData)
-              : Array.isArray(responseData)
-                ? `Array[${responseData.length}]`
-                : typeof responseData,
-            dataType: typeof responseData,
-            isArray: Array.isArray(responseData),
-            dataPreview: responseData && typeof responseData === 'object'
-              ? JSON.stringify(responseData).substring(0, 300)
-              : String(responseData).substring(0, 100)
-          });
+          // console.log('[ApiClient] Response data:', ...); // Отключено
         } catch (e) {
           console.error('[ApiClient] Failed to parse JSON response:', e);
           // Если не удалось прочитать как JSON, пробуем как текст
           try {
             responseData = await response.text();
-            console.log('[ApiClient] Response as text:', responseData.substring(0, 200));
+            // console.log('[ApiClient] Response as text:', ...); // Отключено
           } catch {
             responseData = {};
           }
@@ -176,7 +148,7 @@ export class ApiClient {
       } else {
         try {
           responseData = await response.text();
-          console.log('[ApiClient] Non-JSON response:', responseData.substring(0, 200));
+          // console.log('[ApiClient] Non-JSON response:', ...); // Отключено
         } catch {
           responseData = {};
         }
@@ -238,11 +210,7 @@ export class ApiClient {
         );
       }
 
-      console.log('[ApiClient] Request successful:', {
-        url,
-        status: response.status,
-        dataType: typeof responseData
-      });
+      // console.log('[ApiClient] Request successful:', { url, status, ... }); // Отключено
 
       return responseData;
     } catch (error) {
@@ -479,6 +447,22 @@ export class ApiClient {
     });
   }
 
+  // POST /vectorize-ai-items - векторизация ai_item по fullNames
+  async vectorizeAiItems(params: {
+    fullNames: string[];
+    force: boolean;
+    contextCode?: string;
+  }): Promise<import('../types').VectorizeAiItemsResponse> {
+    return this.request<import('../types').VectorizeAiItemsResponse>('/vectorize-ai-items', {
+      method: 'POST',
+      body: JSON.stringify({
+        fullNames: params.fullNames,
+        force: params.force,
+      }),
+      contextCode: params.contextCode,
+    });
+  }
+
   // GET /api/pipeline/context-definition - получить определения шагов
   async getPipelineContextDefinition(): Promise<{ steps: import('../types').PipelineStepDefinition[] }> {
     return this.request<{ steps: import('../types').PipelineStepDefinition[] }>('/api/pipeline/context-definition');
@@ -520,10 +504,7 @@ export class ApiClient {
       // Используем относительный путь, который будет проксироваться через Vite на внешний сервер
       const logUrl = this.baseUrl ? `${this.baseUrl}/api/logs` : '/api/logs';
 
-      console.log(`[ApiClient] Sending log to backend: ${level}`, {
-        url: logUrl,
-        message: message.substring(0, 100)
-      });
+      // console.log(`[ApiClient] Sending log to backend: ${level}`, ...); // Отключено
 
       const response = await fetch(logUrl, {
         method: 'POST',
@@ -536,7 +517,7 @@ export class ApiClient {
       if (!response.ok) {
         console.warn(`[ApiClient] Failed to send log to backend: ${response.status} ${response.statusText}`);
       } else {
-        console.log(`[ApiClient] Log sent successfully to backend: ${level}`);
+        // console.log(`[ApiClient] Log sent successfully to backend: ${level}`); // Отключено
       }
     } catch (error) {
       // Логируем ошибку, но не прерываем основной поток
@@ -772,8 +753,10 @@ export class ApiClient {
 
 }
 
-// Create default API client instance
-export const apiClient = new ApiClient();
+// Create default API client instance (uses VITE_BACKEND_PORT from .env when set)
+const backendPort = (import.meta as any).env?.VITE_BACKEND_PORT;
+const defaultBaseUrl = backendPort ? `http://localhost:${backendPort}` : '';
+export const apiClient = new ApiClient(defaultBaseUrl);
 
 // Export convenience functions that handle demo mode fallback
 export const getItemsWithFallback = async (): Promise<{ data: AiItem[]; isDemo: boolean }> => {

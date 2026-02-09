@@ -1293,16 +1293,16 @@ app.get('/api/graph', (req, res) => {
 
 // POST /api/chat - RAG чат
 app.post('/api/chat', async (req, res) => {
-  const { query } = req.body;
+  const { message } = req.body;
 
-  if (!query || typeof query !== 'string') {
-    return res.status(400).json({ error: 'Query is required and must be a string' });
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'Поле message обязательно и должно быть строкой' });
   }
 
-  console.log(`[API] POST /api/chat - Processing query: "${query}"`);
+  console.log(`[API] POST /api/chat - Processing message: "${message.substring(0, 50)}..."`);
 
   try {
-    const result = await queryRagAgent(query, MOCK_AI_ITEMS);
+    const result = await queryRagAgent(message, MOCK_AI_ITEMS);
     res.json({
       response: result.text,
       usedContextIds: result.usedContextIds,

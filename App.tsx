@@ -36,6 +36,27 @@ const AppContent: React.FC = () => {
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState<boolean>(false);
   const [isPromptsEditorOpen, setIsPromptsEditorOpen] = useState<boolean>(false);
 
+  // Обработчик открытия Server Logs
+  const handleOpenServerLogs = () => {
+    const logsOpenMode = import.meta.env.VITE_SERVER_LOGS_OPEN_MODE || 'window';
+    
+    if (logsOpenMode === 'dialog') {
+      // Открываем во встроенном диалоге
+      setIsLogsDialogOpen(true);
+    } else {
+      // Открываем в браузере
+      const url = `/server-logs-viewer.html?context-code=${encodeURIComponent(contextCode)}`;
+      
+      if (logsOpenMode === 'window') {
+        // Открываем в новом окне
+        window.open(url, '_blank', 'width=1400,height=900,menubar=no,toolbar=no,location=no,status=no');
+      } else {
+        // Открываем в новой вкладке (tab)
+        window.open(url, '_blank');
+      }
+    }
+  };
+
   // v2.1.1: Переключатель между legacy и новым API
   const [useNewApi, setUseNewApi] = useState<boolean>(true);
 
@@ -365,7 +386,7 @@ const AppContent: React.FC = () => {
       <Sidebar
         currentView={currentView}
         onChangeView={setCurrentView}
-        onOpenLogsDialog={() => setIsLogsDialogOpen(true)}
+        onOpenLogsDialog={handleOpenServerLogs}
         onOpenPromptsEditor={() => setIsPromptsEditorOpen(true)}
         contextCode={contextCode}
         setContextCode={setContextCode}

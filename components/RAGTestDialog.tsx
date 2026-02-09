@@ -15,11 +15,11 @@ interface RAGTestDialogProps {
 
 const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
   const { currentContextCode } = useDataCache();
-  const [activeTab, setActiveTab] = useState<'input' | 'result'>('input');
+  const [activeTab, setActiveTab] = useState<'input' | 'result' | 'chat'>('input');
 
   // Dialog position and size
-  const [position, setPosition] = useState({ x: 100, y: 100 });
-  const [size, setSize] = useState({ width: 900, height: 600 });
+  const [position, setPosition] = useState({ x: 100, y: 40 });
+  const [size, setSize] = useState({ width: 900, height: 420 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -35,8 +35,10 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
 
   // Result state
   const [loading, setLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RAGRetrieveResponse | null>(null);
+  const [chatResult, setChatResult] = useState<string | null>(null);
 
   // Reset on open
   useEffect(() => {
@@ -208,6 +210,38 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleChat = async () => {
+    if (!query.trim()) {
+      setError('Введите вопрос');
+      return;
+    }
+
+    setChatLoading(true);
+    setError(null);
+
+    try {
+      // Формируем запрос: текст вопроса + подготовленный RAG контекст
+      const contextText = result ? result.context.formatted : '';
+      const combinedMessage = `Вопрос: ${query.trim()}\n\nКонтекст (RAG):\n${contextText}`;
+
+      console.log('[RAGTestDialog] Sending Chat request:', { message: combinedMessage });
+
+      const response = await apiClient.chat(combinedMessage);
+
+      console.log('[RAGTestDialog] Received Chat response:', response);
+
+      setChatResult(response.response);
+      setActiveTab('chat');
+    } catch (err) {
+      console.error('[RAGTestDialog] Chat error:', err);
+      let errorMessage = 'Ошибка при обращении к чату';
+      if (err instanceof Error) errorMessage = err.message;
+      setError(errorMessage);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && e.ctrlKey) {
       handleRetrieve();
@@ -280,14 +314,54 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
           <span className="text-white font-bold text-sm">RAG Test</span>
           <span className="text-slate-400 text-xs">({currentContextCode || 'CARL'})</span>
         </div>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-white transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRetrieve}
+            disabled={loading || chatLoading || !query.trim()}
+            className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-3 py-1 rounded text-xs transition-colors flex items-center gap-1.5"
+          >
+            {loading ? (
+              <>
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Retrieving...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Retrieve
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleChat}
+            disabled={loading || chatLoading || !query.trim()}
+            className="bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-3 py-1 rounded text-xs transition-colors flex items-center gap-1.5"
+          >
+            {chatLoading ? (
+              <>
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Chatting...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                Chat
+              </>
+            )}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors p-1"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -315,6 +389,19 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
             <span className="ml-1 text-[10px] bg-green-600/30 text-green-400 px-1 rounded">
               {result.context.metadata.totalChunks}
             </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('chat')}
+          className={`px-4 py-1.5 text-xs font-bold transition-colors ${
+            activeTab === 'chat'
+              ? 'text-purple-400 border-b-2 border-purple-400 bg-purple-900/10'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+        >
+          Chat
+          {chatResult && (
+            <span className="ml-1 w-2 h-2 bg-purple-500 rounded-full inline-block"></span>
           )}
         </button>
       </div>
@@ -418,28 +505,6 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {/* Submit Button */}
-            <div className="flex justify-end mt-auto pt-2">
-              <button
-                onClick={handleRetrieve}
-                disabled={loading || !query.trim()}
-                className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-6 py-2 rounded transition-colors flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Загрузка...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    Retrieve
-                  </>
-                )}
-              </button>
-            </div>
           </div>
         )}
 
@@ -490,6 +555,22 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
             ) : (
               <div className="flex-1 flex items-center justify-center text-slate-500">
                 Нет результатов. Выполните запрос во вкладке Input.
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {chatResult ? (
+              <div className="flex-1 overflow-y-auto p-3 min-h-0 bg-slate-900/30">
+                <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed shadow-inner">
+                  {chatResult}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-slate-500">
+                Нет ответа от LLM. Выполните Chat запрос.
               </div>
             )}
           </div>

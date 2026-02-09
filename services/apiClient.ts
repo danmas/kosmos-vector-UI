@@ -366,10 +366,10 @@ export class ApiClient {
   }
 
   // POST /api/chat - RAG чат
-  async chat(query: string): Promise<ChatResponse> {
+  async chat(message: string): Promise<ChatResponse> {
     return this.request<ChatResponse>('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ message }),
     });
   }
 

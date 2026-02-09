@@ -373,7 +373,7 @@ const AppContent: React.FC = () => {
       case AppView.GRAPH:
         return <KnowledgeGraph key={contextCode} />;
       case AppView.CHAT:
-        return <ChatInterface />;
+        return <ChatInterface key={contextCode} />;
       case AppView.LOGS:
         return <LogViewer />;
       default:

@@ -5,7 +5,8 @@ import type {
   RAGStrategy, 
   FormattingStyle, 
   RAGRetrieveResponse,
-  RAGContextMetadata 
+  RAGContextMetadata,
+  ChatMessage
 } from '../types';
 
 interface RAGTestDialogProps {
@@ -232,6 +233,26 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
 
       setChatResult(response.response);
       setActiveTab('chat');
+
+      // Добавляем сообщение в основной чат RAG Assistant
+      const userMsg: ChatMessage = {
+        id: `rag-user-${Date.now()}`,
+        role: 'user',
+        text: combinedMessage,
+        timestamp: Date.now()
+      };
+
+      const modelMsg: ChatMessage = {
+        id: `rag-model-${Date.now() + 1}`,
+        role: 'model',
+        text: response.response,
+        timestamp: Date.now()
+      };
+
+      const event = new CustomEvent('add-rag-chat-messages', {
+        detail: { userMsg, modelMsg }
+      });
+      window.dispatchEvent(event);
     } catch (err) {
       console.error('[RAGTestDialog] Chat error:', err);
       let errorMessage = 'Ошибка при обращении к чату';

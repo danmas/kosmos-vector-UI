@@ -91,6 +91,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [loadingModalTags, setLoadingModalTags] = useState(false);
   const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
 
+  // Состояния для векторизации в модальном окне
+  const [vectorizingModalItem, setVectorizingModalItem] = useState(false);
+  const [modalItemIsVectorized, setModalItemIsVectorized] = useState(false);
+
   // Состояние для persistent tooltip (остаётся на экране до закрытия)
   const [tooltip, setTooltip] = useState<{
     node: { id: string; type: string; language: string; l2_desc?: string };
@@ -106,6 +110,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     try {
       const fullData = await apiClient.getItem(nodeId);
       setModalItemData(fullData);
+      setModalItemIsVectorized(fullData.isVectorized || false);
       loadModalItemTags(nodeId);
     } catch (err) {
       console.error('Failed to load node details:', err);
@@ -142,6 +147,32 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const closeNodeModal = () => {
     setModalNodeId(null);
     setModalItemData(null);
+    setVectorizingModalItem(false);
+  };
+
+  // Функция векторизации элемента в модальном окне
+  const handleVectorizeModalItem = async () => {
+    if (!modalNodeId || !currentContextCode) return;
+    
+    setVectorizingModalItem(true);
+    try {
+      const result = await apiClient.vectorizeAiItems({
+        fullNames: [modalNodeId],
+        force: true,
+        contextCode: currentContextCode,
+      });
+      
+      setModalItemIsVectorized(true);
+      console.log(`[KnowledgeGraph] Векторизован: ${modalNodeId} (${result.chunksUpdated} чанков)`);
+      
+      alert(`Векторизация выполнена: ${result.chunksUpdated} чанков обновлено`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка векторизации';
+      console.error('[KnowledgeGraph] Ошибка векторизации:', msg);
+      alert(`Ошибка векторизации: ${msg}`);
+    } finally {
+      setVectorizingModalItem(false);
+    }
   };
 
   // Функция добавления узла в историю сессии (полная история)
@@ -1164,6 +1195,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                         title="Управление тегами"
                       >
                         T
+                      </button>
+                      <button
+                        onClick={handleVectorizeModalItem}
+                        disabled={vectorizingModalItem}
+                        className={`text-xs px-2 py-0.5 rounded transition-colors font-bold ${
+                          modalItemIsVectorized
+                            ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                            : 'bg-slate-600 hover:bg-cyan-600 text-slate-300 hover:text-white'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={modalItemIsVectorized ? 'Векторизован. Нажмите для перевекторизации' : 'Векторизовать'}
+                      >
+                        {vectorizingModalItem ? '...' : 'V'}
                       </button>
                     </div>
                     <div className="flex gap-3 text-[10px] text-slate-400 mb-2">

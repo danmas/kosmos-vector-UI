@@ -821,6 +821,100 @@ export class ApiClient {
     });
   }
 
+  // ─────────────────── Prompts Config API (v2.9.0) ───────────────────
+
+  /**
+   * GET /api/prompts-config - Получить текущую конфигурацию промптов
+   */
+  async getPromptsConfig(): Promise<import('../types').PromptsConfigResponse> {
+    return this.request<import('../types').PromptsConfigResponse>('/api/prompts-config');
+  }
+
+  /**
+   * PATCH /api/prompts-config - Обновить конфигурацию промптов
+   */
+  async updatePromptsConfig(
+    updates: Partial<import('../types').PromptsConfig>,
+    comment?: string
+  ): Promise<import('../types').PromptsConfigUpdateResponse> {
+    return this.request<import('../types').PromptsConfigUpdateResponse>('/api/prompts-config', {
+      method: 'PATCH',
+      body: JSON.stringify({ updates, comment }),
+    });
+  }
+
+  /**
+   * GET /api/prompts-config/history - Получить историю изменений промптов
+   */
+  async getPromptsConfigHistory(
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<import('../types').PromptsConfigHistoryResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString()
+    });
+    return this.request<import('../types').PromptsConfigHistoryResponse>(
+      `/api/prompts-config/history?${params.toString()}`
+    );
+  }
+
+  /**
+   * GET /api/prompts-config/history/:id - Получить конкретную версию из истории
+   */
+  async getPromptsConfigHistoryEntry(
+    id: number
+  ): Promise<import('../types').PromptsConfigHistoryEntryResponse> {
+    return this.request<import('../types').PromptsConfigHistoryEntryResponse>(
+      `/api/prompts-config/history/${id}`
+    );
+  }
+
+  /**
+   * POST /api/prompts-config/restore/:id - Восстановить конфигурацию из истории
+   */
+  async restorePromptsConfig(
+    id: number,
+    comment?: string
+  ): Promise<import('../types').PromptsConfigUpdateResponse> {
+    return this.request<import('../types').PromptsConfigUpdateResponse>(
+      `/api/prompts-config/restore/${id}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ comment }),
+      }
+    );
+  }
+
+  /**
+   * POST /api/prompts-config/reset - Сбросить конфигурацию к дефолтным значениям
+   */
+  async resetPromptsConfig(
+    comment?: string
+  ): Promise<import('../types').PromptsConfigUpdateResponse> {
+    return this.request<import('../types').PromptsConfigUpdateResponse>(
+      '/api/prompts-config/reset',
+      {
+        method: 'POST',
+        body: JSON.stringify({ comment }),
+      }
+    );
+  }
+
+  /**
+   * DELETE /api/prompts-config/history/:id - Удалить запись из истории
+   */
+  async deletePromptsConfigHistoryEntry(
+    id: number
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/prompts-config/history/${id}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
 }
 
 // Create default API client instance (uses VITE_BACKEND_PORT from .env when set)

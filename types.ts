@@ -637,3 +637,66 @@ export interface AppConfigErrorResponse {
   success: false;
   error: string;
 }
+
+// ────────────────────────────────────── Prompts Config API Types (v2.9.0)
+
+/**
+ * Запись в истории изменений промптов (краткая)
+ */
+export interface PromptsHistoryEntry {
+  id: number;
+  version: number;
+  createdAt: string; // ISO 8601
+  comment: string | null;
+}
+
+/**
+ * Запись в истории изменений промптов (полная)
+ */
+export interface PromptsHistoryEntryFull extends PromptsHistoryEntry {
+  config: PromptsConfig;
+}
+
+/**
+ * Запрос на обновление конфигурации промптов (v2.9.0)
+ */
+export interface PromptsConfigUpdateRequest {
+  updates: Partial<PromptsConfig>;
+  comment?: string;
+}
+
+/**
+ * Ответ API при обновлении конфигурации промптов (v2.9.0)
+ */
+export interface PromptsConfigUpdateResponse {
+  success: boolean;
+  config: PromptsConfig;
+  historyEntry: PromptsHistoryEntry;
+  message: string;
+}
+
+/**
+ * Ответ API при получении истории промптов (v2.9.0)
+ */
+export interface PromptsConfigHistoryResponse {
+  success: boolean;
+  history: PromptsHistoryEntry[];
+  count: number;
+}
+
+/**
+ * Ответ API при получении конкретной версии из истории (v2.9.0)
+ */
+export interface PromptsConfigHistoryEntryResponse {
+  success: boolean;
+  historyEntry: PromptsHistoryEntryFull;
+}
+
+/**
+ * Ответ API с ошибкой для промптов (v2.9.0)
+ */
+export interface PromptsConfigErrorResponse {
+  success: false;
+  error: string;
+  validationErrors?: string[];
+}

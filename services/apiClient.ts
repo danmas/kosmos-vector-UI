@@ -793,6 +793,34 @@ export class ApiClient {
     return this.request<StrategiesResponse>('/api/rag/strategies');
   }
 
+  // ─────────────────── App Config API (v2.8.0) ───────────────────
+
+  /**
+   * GET /api/config - Получить текущую конфигурацию приложения
+   */
+  async getAppConfig(): Promise<import('../types').AppConfigResponse> {
+    return this.request<import('../types').AppConfigResponse>('/api/config');
+  }
+
+  /**
+   * PATCH /api/config - Частично обновить конфигурацию
+   */
+  async updateAppConfig(updates: import('../types').AppConfigUpdateRequest): Promise<import('../types').AppConfigUpdateResponse> {
+    return this.request<import('../types').AppConfigUpdateResponse>('/api/config', {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  /**
+   * POST /api/config/reset - Сбросить конфигурацию к значениям по умолчанию
+   */
+  async resetAppConfig(): Promise<import('../types').AppConfigUpdateResponse> {
+    return this.request<import('../types').AppConfigUpdateResponse>('/api/config/reset', {
+      method: 'POST',
+    });
+  }
+
 }
 
 // Create default API client instance (uses VITE_BACKEND_PORT from .env when set)

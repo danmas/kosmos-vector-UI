@@ -9,6 +9,7 @@ import Inspector from './components/Inspector';
 import LogViewer from './components/LogViewer';
 import ServerLogsDialog from './components/ServerLogsDialog';
 import PromptsEditorDialog from './components/PromptsEditorDialog';
+import SettingsDialog from './components/SettingsDialog';
 import { AppView, FileNode, ProjectFile } from './types';
 import { MOCK_FILE_TREE } from './constants';
 import { getProjectTreeWithFallback, getKbConfigWithFallback, apiClient } from './services/apiClient';
@@ -35,6 +36,7 @@ const AppContent: React.FC = () => {
   const [excludedFiles, setExcludedFiles] = useState<string[]>([]);
   const [isLogsDialogOpen, setIsLogsDialogOpen] = useState<boolean>(false);
   const [isPromptsEditorOpen, setIsPromptsEditorOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Обработчик открытия Server Logs
   const handleOpenServerLogs = () => {
@@ -388,6 +390,7 @@ const AppContent: React.FC = () => {
         onChangeView={setCurrentView}
         onOpenLogsDialog={handleOpenServerLogs}
         onOpenPromptsEditor={() => setIsPromptsEditorOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         contextCode={contextCode}
         setContextCode={setContextCode}
         availableContextCodes={availableContextCodes}
@@ -437,6 +440,10 @@ const AppContent: React.FC = () => {
       <PromptsEditorDialog
         isOpen={isPromptsEditorOpen}
         onClose={() => setIsPromptsEditorOpen(false)}
+      />
+      <SettingsDialog
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
 
       <FilterDialog

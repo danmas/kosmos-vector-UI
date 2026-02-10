@@ -593,3 +593,47 @@ export interface CompareStrategiesResponse {
   results: CompareStrategiesResult[];
   timestamp: string;
 }
+
+// ────────────────────────────────────── App Config Types (v2.8.0)
+
+export interface AppConfig {
+  KOSMOS_BASE_URL: string;           // URL формат
+  KOSMOS_MODEL: string;              // Строка модели
+  KOSMOS_LOGIC_ARHITECT_MODEL: string | null;
+  LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+  NATURAL_QUERY_SUGGEST_LIMIT: number;        // 1-100
+  NATURAL_QUERY_SIMILARITY_THRESHOLD: number;  // 0-1
+  NATURAL_QUERY_AUTO_USE_THRESHOLD: number;    // 0-1
+}
+
+export interface AppConfigResponse {
+  success: true;
+  config: AppConfig;
+}
+
+export interface AppConfigUpdateRequest {
+  KOSMOS_BASE_URL?: string;
+  KOSMOS_MODEL?: string;
+  KOSMOS_LOGIC_ARHITECT_MODEL?: string | null;
+  LOG_LEVEL?: 'debug' | 'info' | 'warn' | 'error';
+  NATURAL_QUERY_SUGGEST_LIMIT?: number;
+  NATURAL_QUERY_SIMILARITY_THRESHOLD?: number;
+  NATURAL_QUERY_AUTO_USE_THRESHOLD?: number;
+}
+
+export interface AppConfigUpdateResponse {
+  success: true;
+  config: AppConfig;
+  message: string;
+}
+
+export interface AppConfigValidationError {
+  success: false;
+  error: string;
+  validationErrors: string[];
+}
+
+export interface AppConfigErrorResponse {
+  success: false;
+  error: string;
+}

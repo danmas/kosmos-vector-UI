@@ -6,6 +6,7 @@ interface SidebarProps {
   onChangeView: (view: AppView) => void;
   onOpenLogsDialog: () => void;
   onOpenPromptsEditor?: () => void;
+  onOpenSettings?: () => void; // Новый проп для открытия настроек
   contextCode: string;
   setContextCode: (code: string) => void;
   availableContextCodes: string[];
@@ -19,6 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onChangeView, 
   onOpenLogsDialog,
   onOpenPromptsEditor,
+  onOpenSettings, // Новый проп
   contextCode, 
   setContextCode,
   availableContextCodes,
@@ -130,6 +132,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <span className="text-sm">✏️</span>
                   <span className="font-medium text-xs">Prompts Editor</span>
+                </button>
+              )}
+              {onOpenSettings && (
+                <button
+                  onClick={onOpenSettings}
+                  className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+                  title="System Settings (Port 3200)"
+                >
+                  <span className="text-sm">⚙️</span>
+                  <span className="font-medium text-xs">Settings</span>
                 </button>
               )}
         </div>

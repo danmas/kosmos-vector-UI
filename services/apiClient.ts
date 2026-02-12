@@ -751,6 +751,71 @@ export class ApiClient {
     return response as BulkTagsResponse;
   }
 
+  // ─────────────────── Item Types API (v2.10.0) ───────────────────
+
+  /**
+   * GET /api/types - получить все типы
+   */
+  async getItemTypes(): Promise<import('../types').ItemTypeListResponse> {
+    return this.request<import('../types').ItemTypeListResponse>('/api/types');
+  }
+
+  /**
+   * GET /api/types/{code} - получить тип по коду
+   */
+  async getItemType(code: string): Promise<import('../types').ItemTypeResponse> {
+    return this.request<import('../types').ItemTypeResponse>(
+      `/api/types/${encodeURIComponent(code)}`
+    );
+  }
+
+  /**
+   * GET /api/types/{code}/items - получить AI Items с указанным типом
+   */
+  async getItemsByType(code: string): Promise<import('../types').ItemTypeItemsResponse> {
+    return this.request<import('../types').ItemTypeItemsResponse>(
+      `/api/types/${encodeURIComponent(code)}/items`
+    );
+  }
+
+  /**
+   * POST /api/types - создать новый кастомный тип
+   */
+  async createItemType(data: import('../types').ItemTypeCreateRequest): Promise<import('../types').ItemTypeResponse> {
+    return this.request<import('../types').ItemTypeResponse>('/api/types', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * PUT /api/types/{code} - обновить тип
+   */
+  async updateItemType(
+    code: string,
+    data: import('../types').ItemTypeUpdateRequest
+  ): Promise<import('../types').ItemTypeResponse> {
+    return this.request<import('../types').ItemTypeResponse>(
+      `/api/types/${encodeURIComponent(code)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  /**
+   * DELETE /api/types/{code} - удалить кастомный тип
+   */
+  async deleteItemType(code: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/types/${encodeURIComponent(code)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
   // ─────────────────── RAG API (v2.7.0) ───────────────────
 
   /**

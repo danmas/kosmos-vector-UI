@@ -3,13 +3,14 @@ import { useAppConfig } from '../lib/hooks/useAppConfig';
 import { usePromptsConfig } from '../lib/hooks/usePromptsConfig';
 import { AppConfigTab } from './settings/AppConfigTab';
 import { PromptsConfigTab } from './settings/PromptsConfigTab';
+import TypesConfigTab from './settings/TypesConfigTab';
 
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type TabId = 'app' | 'prompts';
+type TabId = 'app' | 'prompts' | 'types';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<TabId>('app');
@@ -36,6 +37,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
   const tabs = [
     { id: 'app' as TabId, label: 'App Config', icon: '⚙️' },
     { id: 'prompts' as TabId, label: 'Prompts Config', icon: '🤖' },
+    { id: 'types' as TabId, label: 'Item Types', icon: '📦' },
   ];
 
   return (
@@ -100,6 +102,10 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
               onSave={promptsConfig.updateConfig}
               onReset={promptsConfig.resetConfig}
             />
+          )}
+          
+          {activeTab === 'types' && (
+            <TypesConfigTab />
           )}
         </div>
       </div>

@@ -4,25 +4,28 @@ import { apiClient } from '../services/apiClient';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
 
+// Feature toggle: использовать API для загрузки типов
+const USE_TYPES_API = true; // Включаем сразу, т.к. бэкенд готов
+
 interface FilterDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-// Все возможные типы AI Items
-const ALL_TYPES: { value: AiItemType; label: string; icon: string }[] = [
-  { value: 'function', label: 'Функции', icon: 'ƒ' },
-  { value: 'class', label: 'Классы', icon: 'C' },
-  { value: 'method', label: 'Методы', icon: 'M' },
-  { value: 'module', label: 'Модули', icon: '◈' },
-  { value: 'interface', label: 'Интерфейсы', icon: 'I' },
-  { value: 'struct', label: 'Структуры', icon: 'S' },
-  { value: 'table', label: 'Таблицы', icon: '▤' },
-  { value: 'table_column', label: 'Колонки таблиц', icon: '│' },
+// Все возможные типы AI Items (legacy fallback)
+const ALL_TYPES: { value: string; label: string; icon: string }[] = [
+  { value: AiItemType.FUNCTION, label: 'Функции', icon: 'ƒ' },
+  { value: AiItemType.CLASS, label: 'Классы', icon: 'C' },
+  { value: AiItemType.METHOD, label: 'Методы', icon: 'M' },
+  { value: AiItemType.MODULE, label: 'Модули', icon: '◈' },
+  { value: AiItemType.INTERFACE, label: 'Интерфейсы', icon: 'I' },
+  { value: AiItemType.STRUCT, label: 'Структуры', icon: 'S' },
+  { value: AiItemType.TABLE, label: 'Таблицы', icon: '▤' },
+  { value: AiItemType.TABLE_COLUMN, label: 'Колонки таблиц', icon: '│' },
 ];
 
 const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
-  const { currentContextCode, getItemsList } = useDataCache();
+  const { currentContextCode, getItemsList, getItemTypes, setItemTypes } = useDataCache();
   const {
     typeFilterEnabled, setTypeFilterEnabled, selectedTypes, toggleType, setAllTypes,
     tagFilterEnabled, setTagFilterEnabled, selectedTagCodes, toggleTag, setAllTags,
@@ -30,6 +33,10 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
 
   const [allTags, setAllTagsData] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Состояние для динамически загруженных типов (новый API)
+  const [apiTypes, setApiTypes] = useState<import('../types').ItemType[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(false);
 
   // Position and Size state
   const [position, setPosition] = useState({ x: window.innerWidth - 450, y: 64 });
@@ -68,6 +75,45 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
       setLoading(false);
     }
   };
+
+  // Загрузка типов через API (если включен USE_TYPES_API)
+  const loadTypes = async () => {
+    if (!USE_TYPES_API) return; // Пропускаем если feature toggle выключен
+    
+    // Проверяем кэш
+    const cached = getItemTypes();
+    if (cached) {
+      console.log('[FilterDialog] Types loaded from cache:', cached.data.length);
+      setApiTypes(cached.data);
+      setLoadingTypes(false);
+      return;
+    }
+    
+    // Если кэш пуст - загружаем с сервера
+    setLoadingTypes(true);
+    try {
+      const res = await apiClient.getItemTypes();
+      if (res.success) {
+        setApiTypes(res.types || []);
+        // Сохраняем в кэш
+        setItemTypes(res.types || [], false);
+        console.log('[FilterDialog] Types loaded from API and cached:', res.types.length);
+      }
+    } catch (err) {
+      console.warn('[FilterDialog] Failed to load types from API, using fallback:', err);
+      // При ошибке просто не обновляем apiTypes, будет использован хардкод
+      setApiTypes([]); // Пустой массив = fallback на ALL_TYPES
+    } finally {
+      setLoadingTypes(false);
+    }
+  };
+
+  // Загружаем типы при открытии (если USE_TYPES_API включен)
+  useEffect(() => {
+    if (isOpen && currentContextCode && USE_TYPES_API) {
+      loadTypes();
+    }
+  }, [isOpen, currentContextCode]);
 
   // Dragging logic
   const onMouseDownDrag = (e: React.MouseEvent) => {
@@ -118,9 +164,41 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
     };
   }, [isOpen, onGlobalMouseMove, onGlobalMouseUp]);
 
+  // Helper функции для работы с типами
+  
+  // Получить иконку для типа (с поддержкой кастомных)
+  const getTypeIcon = (code: string, isSystem: boolean): string => {
+    if (!isSystem) return '⚙'; // Кастомные типы
+    
+    const iconMap: Record<string, string> = {
+      'function': 'ƒ',
+      'class': 'C',
+      'method': 'M',
+      'module': '◈',
+      'interface': 'I',
+      'struct': 'S',
+      'table': '▤',
+      'table_column': '│',
+    };
+    return iconMap[code] || '?';
+  };
+
+  // Получить список типов для отображения
+  const typesToDisplay = USE_TYPES_API && apiTypes.length > 0
+    ? apiTypes
+    : ALL_TYPES.map(t => ({
+        id: 0,
+        code: t.value,
+        name: t.label,
+        description: null,
+        is_system: true,
+        created_at: '',
+        updated_at: null,
+      }));
+
   // Хелперы для master-чекбоксов
-  const allTypesSelected = ALL_TYPES.every(t => selectedTypes.has(t.value));
-  const someTypesSelected = ALL_TYPES.some(t => selectedTypes.has(t.value)) && !allTypesSelected;
+  const allTypesSelected = typesToDisplay.every(t => selectedTypes.has(t.code));
+  const someTypesSelected = typesToDisplay.some(t => selectedTypes.has(t.code)) && !allTypesSelected;
   
   const allTagsSelected = allTags.length > 0 && allTags.every(t => selectedTagCodes.has(t.code));
   const someTagsSelected = allTags.some(t => selectedTagCodes.has(t.code)) && !allTagsSelected;
@@ -129,7 +207,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
     if (allTypesSelected) {
       setAllTypes([]);
     } else {
-      setAllTypes(ALL_TYPES.map(t => t.value));
+      setAllTypes(typesToDisplay.map(t => t.code));
     }
   };
 
@@ -190,49 +268,63 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
               </label>
               {typeFilterEnabled && (
                 <span className="text-[10px] text-slate-500">
-                  {selectedTypes.size}/{ALL_TYPES.length}
+                  {selectedTypes.size}/{typesToDisplay.length}
                 </span>
               )}
             </div>
             
             {typeFilterEnabled && (
               <div className="p-2 space-y-1 bg-slate-900/50">
-                {/* Master checkbox */}
-                <label className="flex items-center gap-2 p-1.5 rounded bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 border-b border-slate-700 mb-1">
-                  <input
-                    type="checkbox"
-                    checked={allTypesSelected}
-                    ref={el => { if (el) el.indeterminate = someTypesSelected; }}
-                    onChange={handleToggleAllTypes}
-                    className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
-                  />
-                  <span className="text-[10px] font-medium text-slate-300">Выбрать все</span>
-                </label>
-                
-                {ALL_TYPES.map(typeInfo => {
-                  const isAvailable = availableTypes.has(typeInfo.value);
-                  const isSelected = selectedTypes.has(typeInfo.value);
-                  return (
-                    <label
-                      key={typeInfo.value}
-                      className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${
-                        isSelected ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-slate-800/30 border border-transparent hover:bg-slate-800/50'
-                      } ${!isAvailable ? 'opacity-50' : ''}`}
-                    >
+                {USE_TYPES_API && loadingTypes ? (
+                  <div className="text-[10px] text-slate-500 text-center py-2">
+                    Загрузка типов...
+                  </div>
+                ) : (
+                  <>
+                    {/* Master checkbox */}
+                    <label className="flex items-center gap-2 p-1.5 rounded bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 border-b border-slate-700 mb-1">
                       <input
                         type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleType(typeInfo.value)}
+                        checked={allTypesSelected}
+                        ref={el => { if (el) el.indeterminate = someTypesSelected; }}
+                        onChange={handleToggleAllTypes}
                         className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
                       />
-                      <span className="w-5 h-5 flex items-center justify-center bg-slate-700 rounded text-[10px] font-mono text-cyan-400">
-                        {typeInfo.icon}
-                      </span>
-                      <span className="text-[11px] text-slate-200">{typeInfo.label}</span>
-                      {!isAvailable && <span className="text-[9px] text-slate-500 ml-auto">(нет данных)</span>}
+                      <span className="text-[10px] font-medium text-slate-300">Выбрать все</span>
                     </label>
-                  );
-                })}
+                    
+                    {typesToDisplay.map(type => {
+                      const isAvailable = availableTypes.has(type.code);
+                      const isSelected = selectedTypes.has(type.code);
+                      const icon = getTypeIcon(type.code, type.is_system);
+                      
+                      return (
+                        <label
+                          key={type.code}
+                          className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${
+                            isSelected ? 'bg-cyan-500/10 border border-cyan-500/30' : 'bg-slate-800/30 border border-transparent hover:bg-slate-800/50'
+                          } ${!isAvailable ? 'opacity-50' : ''}`}
+                          title={type.description || undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleType(type.code)}
+                            className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="w-5 h-5 flex items-center justify-center bg-slate-700 rounded text-[10px] font-mono text-cyan-400">
+                            {icon}
+                          </span>
+                          <span className="text-[11px] text-slate-200">{type.name}</span>
+                          {USE_TYPES_API && !type.is_system && (
+                            <span className="text-[9px] text-purple-400 ml-auto">(custom)</span>
+                          )}
+                          {!isAvailable && <span className="text-[9px] text-slate-500 ml-auto">(нет данных)</span>}
+                        </label>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             )}
           </div>

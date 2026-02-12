@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef, ReactNode, useEffect } from 'react';
-import { AiItemSummary } from '../../types';
+import { AiItemSummary, ItemType } from '../../types';
 import { GraphData, getGraphWithFallback, getItemsListWithFallback, apiClient } from '../../services/apiClient';
 
 // Типы для кэша
@@ -12,6 +12,7 @@ export interface CacheEntry<T> {
 interface ContextCache {
   graph?: CacheEntry<GraphData>;
   itemsList?: CacheEntry<AiItemSummary[]>;
+  itemTypes?: CacheEntry<ItemType[]>;
 }
 
 interface DataCacheState {
@@ -30,10 +31,12 @@ export interface DataCacheContextValue {
   // Получение данных из кэша
   getGraph: () => CacheEntry<GraphData> | null;
   getItemsList: () => CacheEntry<AiItemSummary[]> | null;
+  getItemTypes: () => CacheEntry<ItemType[]> | null;
   
   // Установка данных в кэш (для случаев когда компонент сам загрузил данные)
   setGraph: (data: GraphData, isDemo: boolean) => void;
   setItemsList: (data: AiItemSummary[], isDemo: boolean) => void;
+  setItemTypes: (data: ItemType[], isDemo: boolean) => void;
   
   // Фоновая предзагрузка всех данных
   prefetchAll: (contextCode?: string) => Promise<void>;
@@ -107,6 +110,12 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     return contextCache.itemsList || null;
   }, [getCurrentCache]);
 
+  // Получить типы из кэша
+  const getItemTypes = useCallback((): CacheEntry<ItemType[]> | null => {
+    const contextCache = getCurrentCache();
+    return contextCache.itemTypes || null;
+  }, [getCurrentCache]);
+
   // Установить граф в кэш
   const setGraph = useCallback((data: GraphData, isDemo: boolean) => {
     setCache(prev => ({
@@ -137,6 +146,22 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
       }
     }));
     console.log(`[DataCache] ItemsList cached for context: ${currentContextCode}`);
+  }, [currentContextCode]);
+
+  // Установить типы в кэш
+  const setItemTypes = useCallback((data: ItemType[], isDemo: boolean) => {
+    setCache(prev => ({
+      ...prev,
+      [currentContextCode]: {
+        ...prev[currentContextCode],
+        itemTypes: {
+          data,
+          timestamp: Date.now(),
+          isDemo
+        }
+      }
+    }));
+    console.log(`[DataCache] ItemTypes cached for context: ${currentContextCode}`);
   }, [currentContextCode]);
 
   // Фоновая предзагрузка всех данных
@@ -273,8 +298,10 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     addContextCode,
     getGraph,
     getItemsList,
+    getItemTypes,
     setGraph,
     setItemsList,
+    setItemTypes,
     prefetchAll,
     invalidate,
     isPrefetching,

@@ -700,3 +700,42 @@ export interface PromptsConfigErrorResponse {
   error: string;
   validationErrors?: string[];
 }
+
+// ────────────────────────────────────── Item Types API (v2.10.0)
+
+export interface ItemType {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ItemTypeListResponse {
+  success: boolean;
+  types: ItemType[];
+}
+
+export interface ItemTypeResponse {
+  success: boolean;
+  itemType: ItemType;
+}
+
+export interface ItemTypeItemsResponse {
+  success: boolean;
+  itemType: ItemType;
+  items: AiItemSummary[];
+}
+
+export interface ItemTypeCreateRequest {
+  code: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface ItemTypeUpdateRequest {
+  name?: string;
+  description?: string | null;
+}

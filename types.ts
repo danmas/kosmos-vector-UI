@@ -485,6 +485,12 @@ export interface RAGFormattingConfig {
   maxTokens?: number;
 }
 
+export interface RAGItemFilter {
+  mode: 'expression';
+  typeCodes?: string[];  // ['function', 'class', ...]
+  tagCodes?: string[];   // ['IMP', 'REF', ...]
+}
+
 export interface RAGRetrieveRequest {
   query: string;
   contextCode: string;
@@ -493,6 +499,7 @@ export interface RAGRetrieveRequest {
   levels?: ChunkLevel[];
   includeRelations?: boolean;
   formatting?: RAGFormattingConfig;
+  itemFilter?: RAGItemFilter;  // новое поле
 }
 
 export interface ContextSection {

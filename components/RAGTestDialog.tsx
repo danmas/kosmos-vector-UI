@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../services/apiClient';
 import { useDataCache } from '../lib/context/DataCacheContext';
+import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import type { 
   RAGStrategy, 
   FormattingStyle, 
   RAGRetrieveResponse,
   RAGContextMetadata,
-  ChatMessage
+  ChatMessage,
+  RAGItemFilter
 } from '../types';
 
 interface RAGTestDialogProps {
@@ -16,6 +18,13 @@ interface RAGTestDialogProps {
 
 const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
   const { currentContextCode } = useDataCache();
+  const { 
+    typeFilterEnabled, 
+    selectedTypes,
+    tagFilterEnabled,
+    selectedTagCodes,
+    setIsFilterDialogOpen 
+  } = useGraphFilter();
   const [activeTab, setActiveTab] = useState<'input' | 'result' | 'chat'>('input');
 
   // Dialog position and size
@@ -140,6 +149,22 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
     setError(null);
 
     try {
+      // Собрать фильтр из GraphFilterContext
+      let itemFilter: RAGItemFilter | undefined;
+      
+      if ((typeFilterEnabled && selectedTypes.size > 0) || 
+          (tagFilterEnabled && selectedTagCodes.size > 0)) {
+        itemFilter = {
+          mode: 'expression',
+          typeCodes: typeFilterEnabled && selectedTypes.size > 0 
+            ? Array.from(selectedTypes) 
+            : undefined,
+          tagCodes: tagFilterEnabled && selectedTagCodes.size > 0 
+            ? Array.from(selectedTagCodes) 
+            : undefined,
+        };
+      }
+
       const requestPayload = {
         query: query.trim(),
         contextCode: currentContextCode || 'CARL',
@@ -152,6 +177,7 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
           includeFileNames: true,
           includeRelations,
         },
+        itemFilter,  // добавляем фильтр
       };
 
       console.log('[RAGTestDialog] Sending request:', requestPayload);
@@ -178,6 +204,24 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
           },
         },
       };
+
+      // Проверка на пустой результат с фильтром
+      if (safeResponse.context.metadata.totalChunks === 0 && itemFilter) {
+        const filterDesc: string[] = [];
+        if (itemFilter.typeCodes && itemFilter.typeCodes.length > 0) {
+          filterDesc.push(`• Types: ${itemFilter.typeCodes.join(', ')}`);
+        }
+        if (itemFilter.tagCodes && itemFilter.tagCodes.length > 0) {
+          filterDesc.push(`• Tags: ${itemFilter.tagCodes.join(', ')}`);
+        }
+        
+        setError(
+          `⚠ No chunks match current filters.\n\n` +
+          `Filters applied:\n${filterDesc.join('\n')}\n\n` +
+          `Try adjusting filters or query.`
+        );
+        return; // остаться на вкладке Input
+      }
 
       setResult(safeResponse);
       setActiveTab('result');
@@ -336,6 +380,27 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
           <span className="text-slate-400 text-xs">({currentContextCode || 'CARL'})</span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsFilterDialogOpen(true)}
+            className={`px-3 py-1 rounded text-xs font-bold transition-colors flex items-center gap-1.5 ${
+              (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+                ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+            }`}
+            title="Фильтры по типам и тегам"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filter
+            {((typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)) && (
+              <span className="ml-1 bg-cyan-800 text-cyan-100 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {(typeFilterEnabled && selectedTypes.size > 0 ? selectedTypes.size : 0) +
+                 (tagFilterEnabled && selectedTagCodes.size > 0 ? selectedTagCodes.size : 0)}
+              </span>
+            )}
+          </button>
           <button
             onClick={handleRetrieve}
             disabled={loading || chatLoading || !query.trim()}
@@ -550,6 +615,23 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
                   <span className="text-slate-400">
                     Формат: <span className="text-purple-400 font-bold">{result.context.metadata.formattingStyle}</span>
                   </span>
+                  {/* Показываем примененные фильтры */}
+                  {((typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)) && (
+                    <span className="text-slate-400">
+                      🔍 Filtered:
+                      {typeFilterEnabled && selectedTypes.size > 0 && (
+                        <span className="text-cyan-400 font-bold ml-1">
+                          types({selectedTypes.size})
+                        </span>
+                      )}
+                      {typeFilterEnabled && selectedTypes.size > 0 && tagFilterEnabled && selectedTagCodes.size > 0 && ', '}
+                      {tagFilterEnabled && selectedTagCodes.size > 0 && (
+                        <span className="text-purple-400 font-bold ml-1">
+                          tags({selectedTagCodes.size})
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
 
                 {/* Formatted Context */}

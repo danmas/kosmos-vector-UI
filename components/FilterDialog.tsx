@@ -223,7 +223,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
 
   return (
     <div
-      className="fixed z-[100] flex flex-col pointer-events-none"
+      className="fixed z-[10000] flex flex-col pointer-events-none"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -413,7 +413,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
         {/* Resize Handle */}
         <div
           onMouseDown={onMouseDownResize}
-          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-[101] flex items-end justify-end p-0.5"
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-[10001] flex items-end justify-end p-0.5"
         >
           <svg className="w-2 h-2 text-slate-600" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22 22h-2v-2h2v2zM22 18h-2v-2h2v2zM18 22h-2v-2h2v2zM18 18h-2v-2h2v2zM14 22h-2v-2h2v2zM22 14h-2v-2h2v2z" />

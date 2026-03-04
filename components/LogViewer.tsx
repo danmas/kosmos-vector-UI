@@ -75,14 +75,12 @@ const LogViewer: React.FC<LogViewerProps> = ({
       }, 3000);
     };
 
-    // Подписка на UI логи
+    // Подписка на UI логи (с автоматической отдачей буфера/истории)
     const unsubscribeUiLogger = uiLogger.subscribe((log) => {
       setLogs(prevLogs => {
         // Check if log already exists (avoid duplicates)
         const exists = prevLogs.some(l => l.id === log.id);
-        if (exists) {
-          return prevLogs;
-        }
+        if (exists) return prevLogs;
         // Add new log at the end (chronological order)
         return [...prevLogs, log];
       });
@@ -106,6 +104,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const clearLogs = () => {
     setLogs([]);
     setExpandedLogs(new Set());
+    uiLogger.clearBuffer();
   };
 
   const toggleLogDetails = (logId: string) => {
@@ -238,6 +237,12 @@ const LogViewer: React.FC<LogViewerProps> = ({
           logs.map((log) => {
             const isExpanded = expandedLogs.has(log.id);
             const hasDetails = log.details && Object.keys(log.details).length > 0;
+
+            // Извлекаем контекстные префиксы [TAG] из сообщения
+            // Например: "[PIPELINE] Step 1 started" -> badge=PIPELINE, rest="Step 1 started"
+            const tagMatch = log.message.match(/^\[([A-Z0-9_\-]+)\]\s(.*)$/);
+            const contextBadge = tagMatch ? tagMatch[1] : null;
+            const displayMessage = tagMatch ? tagMatch[2] : log.message;
             
             return (
               <div key={log.id} className={`${log.source === 'UI' ? 'bg-slate-900/30' : ''} rounded`}>
@@ -257,16 +262,25 @@ const LogViewer: React.FC<LogViewerProps> = ({
                   }`}>
                     [{log.level}]
                   </span>
-                  {log.source === 'UI' && (
+                  {log.source === 'UI' && !contextBadge && (
                     <span className="shrink-0 text-xs text-cyan-400 font-semibold w-8">
                       [UI]
+                    </span>
+                  )}
+                  {contextBadge && (
+                    <span className={`shrink-0 text-xs font-semibold px-1 rounded ${
+                      log.source === 'UI'
+                        ? 'bg-cyan-900/40 text-cyan-300'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {contextBadge}
                     </span>
                   )}
                   <span className={`break-all whitespace-pre-wrap flex-1 ${
                     log.level === 'ERROR' ? 'text-red-300' : 
                     log.source === 'UI' ? 'text-cyan-200' : 'text-slate-300'
                   }`}>
-                    {log.message}
+                    {displayMessage}
                   </span>
                   {hasDetails && (
                     <span className="shrink-0 text-xs text-slate-500 ml-2">

@@ -23,27 +23,27 @@ export interface DataCacheContextValue {
   // Текущий context code
   currentContextCode: string;
   setCurrentContextCode: (code: string) => void;
-  
+
   // Список доступных Context Codes
   availableContextCodes: string[];
   addContextCode: (code: string) => void;
-  
+
   // Получение данных из кэша
   getGraph: () => CacheEntry<GraphData> | null;
   getItemsList: () => CacheEntry<AiItemSummary[]> | null;
   getItemTypes: () => CacheEntry<ItemType[]> | null;
-  
+
   // Установка данных в кэш (для случаев когда компонент сам загрузил данные)
   setGraph: (data: GraphData, isDemo: boolean) => void;
   setItemsList: (data: AiItemSummary[], isDemo: boolean) => void;
   setItemTypes: (data: ItemType[], isDemo: boolean) => void;
-  
+
   // Фоновая предзагрузка всех данных
   prefetchAll: (contextCode?: string) => Promise<void>;
-  
+
   // Инвалидация кэша
   invalidate: (contextCode?: string) => void;
-  
+
   // Статус загрузки
   isPrefetching: boolean;
   prefetchProgress: { loaded: number; total: number };
@@ -56,16 +56,24 @@ export interface DataCacheProviderProps {
   initialContextCode?: string;
 }
 
-export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ 
-  children, 
-  initialContextCode = 'CARL' 
+export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
+  children,
+  initialContextCode = 'CARL'
 }) => {
   const [cache, setCache] = useState<DataCacheState>({});
   const [currentContextCode, setCurrentContextCode] = useState(initialContextCode);
   const [availableContextCodes, setAvailableContextCodes] = useState<string[]>([initialContextCode]);
   const [isPrefetching, setIsPrefetching] = useState(false);
   const [prefetchProgress, setPrefetchProgress] = useState({ loaded: 0, total: 2 });
-  
+
+  // Ref для отслеживания последнего состояния кэша без триггера ререндеров
+  const cacheRef = useRef<DataCacheState>({});
+
+  // Синхронизируем ref с состоянием
+  useEffect(() => {
+    cacheRef.current = cache;
+  }, [cache]);
+
   // Ref для отслеживания активных запросов (чтобы избежать дублирования)
   const activeRequests = useRef<Set<string>>(new Set());
 
@@ -78,7 +86,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
         if (response.success && response.contexts && response.contexts.length > 0) {
           setAvailableContextCodes(response.contexts);
           console.log('[DataCache] Loaded context codes:', response.contexts);
-          
+
           // Если текущий context code не в списке, переключаемся на первый доступный
           if (!response.contexts.includes(currentContextCode)) {
             setCurrentContextCode(response.contexts[0]);
@@ -89,7 +97,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
         console.warn('[DataCache] Failed to load context codes from server, using defaults:', error);
       }
     };
-    
+
     loadContextCodes();
   }, []);
 
@@ -168,34 +176,34 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
   const prefetchAll = useCallback(async (contextCode?: string) => {
     const targetContext = contextCode || currentContextCode;
     const requestKey = `prefetch-${targetContext}`;
-    
+
     // Проверяем, не идёт ли уже загрузка для этого контекста
     if (activeRequests.current.has(requestKey)) {
       console.log(`[DataCache] Prefetch already in progress for context: ${targetContext}`);
       return;
     }
-    
-    // Проверяем, есть ли уже данные в кэше
-    const existingCache = cache[targetContext];
+
+    // Проверяем, есть ли уже данные в кэше (используем ref чтобы не зависеть от cache в deps)
+    const existingCache = cacheRef.current[targetContext];
     if (existingCache?.graph && existingCache?.itemsList) {
       console.log(`[DataCache] Data already cached for context: ${targetContext}`);
       return;
     }
-    
+
     console.log(`[DataCache] Starting prefetch for context: ${targetContext}`);
     activeRequests.current.add(requestKey);
     setIsPrefetching(true);
     setPrefetchProgress({ loaded: 0, total: 2 });
-    
+
     try {
       // Загружаем данные параллельно, передавая contextCode явно
       const results = await Promise.allSettled([
         getGraphWithFallback(targetContext),
         getItemsListWithFallback(targetContext)
       ]);
-      
+
       let loaded = 0;
-      
+
       // Обрабатываем результат графа
       if (results[0].status === 'fulfilled') {
         const graphResult = results[0].value;
@@ -219,7 +227,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
       } else {
         console.error(`[DataCache] Failed to prefetch graph:`, results[0].reason);
       }
-      
+
       // Обрабатываем результат списка элементов
       if (results[1].status === 'fulfilled') {
         const itemsResult = results[1].value;
@@ -242,17 +250,17 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
       } else {
         console.error(`[DataCache] Failed to prefetch itemsList:`, results[1].reason);
       }
-      
+
       setPrefetchProgress({ loaded, total: 2 });
       console.log(`[DataCache] Prefetch completed for context: ${targetContext} (${loaded}/2 successful)`);
-      
+
     } catch (err) {
       console.error(`[DataCache] Prefetch error for context: ${targetContext}`, err);
     } finally {
       activeRequests.current.delete(requestKey);
       setIsPrefetching(false);
     }
-  }, [cache, currentContextCode]);
+  }, [currentContextCode]);
 
   // Инвалидация кэша
   const invalidate = useCallback((contextCode?: string) => {
@@ -291,7 +299,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     console.log(`[DataCache] New context code added: ${trimmedCode}`);
   }, [availableContextCodes]);
 
-  const value: DataCacheContextValue = {
+  const value: DataCacheContextValue = React.useMemo(() => ({
     currentContextCode,
     setCurrentContextCode,
     availableContextCodes,
@@ -306,7 +314,21 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({
     invalidate,
     isPrefetching,
     prefetchProgress
-  };
+  }), [
+    currentContextCode,
+    availableContextCodes,
+    getGraph,
+    getItemsList,
+    getItemTypes,
+    setGraph,
+    setItemsList,
+    setItemTypes,
+    prefetchAll,
+    invalidate,
+    isPrefetching,
+    prefetchProgress,
+    addContextCode
+  ]);
 
   return (
     <DataCacheContext.Provider value={value}>

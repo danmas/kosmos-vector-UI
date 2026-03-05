@@ -104,6 +104,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     y: number;
   } | null>(null);
 
+  // Узел с «зелёным» выделением после тултипа — сбрасывается только при выборе другого узла (клик или новый тултип)
+  const [lastTooltipHighlightedNodeId, setLastTooltipHighlightedNodeId] = useState<string | null>(null);
+
   // Состояние для перетаскивания Tooltip
   const [isDraggingTooltip, setIsDraggingTooltip] = useState(false);
   const dragStartRef = useRef<{ clientX: number, clientY: number, tooltipX: number, tooltipY: number } | null>(null);
@@ -139,6 +142,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       };
     }
   }, [isDraggingTooltip]);
+
+  // Узел с зелёной обводкой: открытый тултип или последний узел с закрытым тултипом
+  const greenHighlightNodeId = tooltip?.node?.id ?? lastTooltipHighlightedNodeId;
 
   const handleTooltipMouseDown = (e: React.MouseEvent) => {
     if (!tooltip) return;
@@ -701,6 +707,37 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
   const displayGraphData = finalFilteredGraphData;
 
+  // Обновление обводки узлов: зелёный = открытый тултип или последний узел с закрытым тултипом
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl?.children?.length) return;
+    const container = svgEl.children[1] as SVGGElement | undefined;
+    if (!container?.children || container.children.length < 3) return;
+    const nodeContainer = container.children[2];
+    const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
+    const TOOLTIP_STROKE = '#22c55e';
+    for (let i = 0; i < nodeContainer.children.length; i++) {
+      const g = nodeContainer.children[i] as SVGGElement & { __data__?: { id: string } };
+      const d = g.__data__;
+      if (!d) continue;
+      const shape = g.querySelector('rect, circle');
+      if (!shape) continue;
+      const isTooltipNode = greenHighlightNodeId != null && d.id === greenHighlightNodeId;
+      let strokeColor: string;
+      let strokeWidth: number;
+      if (isTooltipNode) {
+        strokeColor = TOOLTIP_STROKE;
+        strokeWidth = 4;
+      } else {
+        const historyIndex = clickHistory.indexOf(d.id);
+        strokeColor = historyIndex !== -1 ? yellowShades[historyIndex] : '#1e293b';
+        strokeWidth = historyIndex !== -1 ? 4 : 2;
+      }
+      shape.setAttribute('stroke', strokeColor);
+      shape.setAttribute('stroke-width', String(strokeWidth));
+    }
+  }, [greenHighlightNodeId, clickHistory, displayGraphData]);
+
   useEffect(() => {
     const renderStart = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect отрисовки ЗАПУЩЕН`, {
@@ -824,6 +861,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .on("click", (event: any, d: any) => {
         addToClickHistory(d.id);
         addToSessionHistory(d.id);
+        setLastTooltipHighlightedNodeId(null);
 
         // Alt+клик — оставляем ТОЛЬКО этот узел и его связи (сброс остального фильтра)
         if (event.altKey) {
@@ -962,6 +1000,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                 x: clientX - svgRect.left + 20,
                 y: clientY - svgRect.top - 10
               });
+              setLastTooltipHighlightedNodeId(d.id);
             }
           }, 1000);
         };

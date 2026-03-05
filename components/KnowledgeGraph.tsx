@@ -1103,6 +1103,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     function dragstarted(event: any, d: any) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
 
+      // Сбрасываем таймер тултипа — при drag тултип не нужен
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = null;
+      }
+
       // Convert screen coordinates to graph coordinates considering zoom/pan
       const pointer = d3.pointer(event, container.node());
       d.fx = pointer[0];

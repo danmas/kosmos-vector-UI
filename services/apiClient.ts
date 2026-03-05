@@ -289,7 +289,7 @@ export class ApiClient {
     }
 
 
-    
+
   }
 
   // GET /api/items - получение всех AiItem
@@ -351,6 +351,14 @@ export class ApiClient {
   async extractColumns(itemId: string): Promise<import('../types').ColumnExtractionResponse> {
     return this.request<import('../types').ColumnExtractionResponse>(
       `/api/items/${encodeURIComponent(itemId)}/extract-columns`,
+      { method: 'POST' }
+    );
+  }
+
+  // POST /api/items/:id/rebuild-sql-links - пересборка L1-связей из клиентской БД
+  async rebuildSqlLinks(itemId: string): Promise<any> {
+    return this.request<any>(
+      `/api/items/${encodeURIComponent(itemId)}/rebuild-sql-links`,
       { method: 'POST' }
     );
   }
@@ -552,8 +560,8 @@ export class ApiClient {
    * POST /api/v1/natural-query/suggest - поиск похожих вопросов
    */
   async suggestSimilarQuestions(
-    question: string, 
-    limit: number = 5, 
+    question: string,
+    limit: number = 5,
     threshold: number = 0.8
   ): Promise<import('../types').SuggestResponse> {
     const contextCode = (typeof window !== 'undefined' && (window as any).g_context_code) || 'CARL';
@@ -615,7 +623,7 @@ export class ApiClient {
       method: 'POST',
     });
 
-    
+
   }
 
   // ─────────────────── Prompts API (v2.4.0) ───────────────────
@@ -676,8 +684,8 @@ export class ApiClient {
     });
 
 
-    
-    
+
+
   }
 
   /**
@@ -745,7 +753,7 @@ export class ApiClient {
   // Массовое удаление тегов у элементов  
   async removeTagsFromItems(itemIds: string[], tagCodes: string[]): Promise<BulkTagsResponse> {
     const response = await this.request('/api/ai-items/bulk/tags/remove', {
-      method: 'POST', 
+      method: 'POST',
       body: JSON.stringify({ itemIds, tagCodes })
     });
     return response as BulkTagsResponse;

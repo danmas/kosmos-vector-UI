@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AiItem, L1Link, L1LinkIn, L1LinkType } from '../../types';
+import { apiClient } from '../../services/apiClient';
 
 interface L1ConnectivityViewProps {
   item: AiItem;
@@ -34,6 +35,28 @@ const TYPE_COLORS: Partial<Record<L1LinkType, string>> = {
 };
 
 const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, onItemSelect }) => {
+  const [isRebuilding, setIsRebuilding] = useState(false);
+
+  const handleRebuildSqlLinks = async () => {
+    setIsRebuilding(true);
+    try {
+      const data = await apiClient.rebuildSqlLinks(item.id);
+      if (!data.success) {
+        alert(data.error ?? 'Rebuild failed');
+        return;
+      }
+      const msg = `L1 ссылки пересобраны успешно!\nСоздано: ${data.report.linksCreated}\nУдалено: ${data.report.linksDeleted}`;
+      alert(msg);
+      if (onItemSelect) {
+        onItemSelect(item.id);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Ошибка пересборки SQL ссылок');
+    } finally {
+      setIsRebuilding(false);
+    }
+  };
+
   // Нормализация: поддержка как новых объектов, так и старых строк (для обратной совместимости)
   const normalizeOutgoing = (links: L1Link[] | string[]): L1Link[] => {
     if (!links || links.length === 0) return [];
@@ -57,62 +80,85 @@ const L1ConnectivityView: React.FC<L1ConnectivityViewProps> = ({ item, onItemSel
   const incoming = normalizeIncoming(item.l1_in);
 
   return (
-    <div className="grid grid-cols-2 gap-2 h-full">
-      {/* Dependencies (Outgoing) */}
-      <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
-        <h3 className="text-purple-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
-          Dependencies 
-          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{outgoing.length}</span>
-        </h3>
-        <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
-          {outgoing.length > 0 ? (
-            outgoing.map((link, idx) => (
-              <div 
-                key={`${link.target}-${idx}`} 
-                onClick={() => onItemSelect?.(link.target)}
-                className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer group"
-              >
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-slate-300 font-mono break-all pr-1 flex-1">{link.target}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${TYPE_COLORS[link.type] || TYPE_COLORS.depends_on}`}>
-                    {TYPE_LABELS[link.type] || link.type}
-                  </span>
-                  <span className="text-slate-500 group-hover:text-blue-400 shrink-0">→</span>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-slate-500 italic text-xs">No outgoing dependencies.</p>
-          )}
+    <div className="flex flex-col gap-2 h-full">
+      {/* Action Bar for SQL Objects */}
+      {(item.type === 'function' || item.type === 'table') && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleRebuildSqlLinks}
+            disabled={isRebuilding}
+            className="text-xs bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-3 py-1 rounded transition-colors font-bold shadow-lg flex items-center gap-1"
+            title="Пересобрать L1-связи напрямую из клиентской БД"
+          >
+            {isRebuilding ? (
+              <>
+                <span className="w-3 h-3 block rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+                Rebuilding...
+              </>
+            ) : (
+              'Rebuild SQL Links'
+            )}
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Used By (Incoming) */}
-      <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
-        <h3 className="text-emerald-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
-          Used By 
-          <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{incoming.length}</span>
-        </h3>
-        <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
-          {incoming.length > 0 ? (
-            incoming.map((link, idx) => (
-              <div 
-                key={`${link.source}-${idx}`} 
-                onClick={() => onItemSelect?.(link.source)} 
-                className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer group"
-              >
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-slate-300 font-mono break-all pr-1 flex-1">{link.source}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${TYPE_COLORS[link.type] || TYPE_COLORS.depends_on}`}>
-                    {TYPE_LABELS[link.type] || link.type}
-                  </span>
-                  <span className="text-slate-500 group-hover:text-blue-400 shrink-0">←</span>
+      <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
+        {/* Dependencies (Outgoing) */}
+        <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
+          <h3 className="text-purple-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
+            Dependencies
+            <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{outgoing.length}</span>
+          </h3>
+          <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
+            {outgoing.length > 0 ? (
+              outgoing.map((link, idx) => (
+                <div
+                  key={`${link.target}-${idx}`}
+                  onClick={() => onItemSelect?.(link.target)}
+                  className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer group"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-300 font-mono break-all pr-1 flex-1">{link.target}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${TYPE_COLORS[link.type] || TYPE_COLORS.depends_on}`}>
+                      {TYPE_LABELS[link.type] || link.type}
+                    </span>
+                    <span className="text-slate-500 group-hover:text-blue-400 shrink-0">→</span>
+                  </div>
                 </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-slate-500 italic text-xs">Not referenced by other indexed items.</p>
-          )}
+              ))
+            ) : (
+              <p className="text-slate-500 italic text-xs">No outgoing dependencies.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Used By (Incoming) */}
+        <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700 flex flex-col overflow-hidden">
+          <h3 className="text-emerald-400 font-bold mb-2 flex items-center gap-1.5 text-sm shrink-0">
+            Used By
+            <span className="text-xs bg-slate-700 text-white px-1.5 py-0.5 rounded-full">{incoming.length}</span>
+          </h3>
+          <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
+            {incoming.length > 0 ? (
+              incoming.map((link, idx) => (
+                <div
+                  key={`${link.source}-${idx}`}
+                  onClick={() => onItemSelect?.(link.source)}
+                  className="p-1.5 bg-slate-800 rounded border border-slate-700 text-xs hover:border-blue-500 cursor-pointer group"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-slate-300 font-mono break-all pr-1 flex-1">{link.source}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${TYPE_COLORS[link.type] || TYPE_COLORS.depends_on}`}>
+                      {TYPE_LABELS[link.type] || link.type}
+                    </span>
+                    <span className="text-slate-500 group-hover:text-blue-400 shrink-0">←</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-500 italic text-xs">Not referenced by other indexed items.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

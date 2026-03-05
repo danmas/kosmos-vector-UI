@@ -107,6 +107,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Узел с «зелёным» выделением после тултипа — сбрасывается только при выборе другого узла (клик или новый тултип)
   const [lastTooltipHighlightedNodeId, setLastTooltipHighlightedNodeId] = useState<string | null>(null);
 
+  // Множественное выделение (rubber-band selection)
+  const [multiSelectedNodeIds, setMultiSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [multiSelectTooltip, setMultiSelectTooltip] = useState<{ x: number; y: number } | null>(null);
+
+  // Состояние для перетаскивания MultiSelect Tooltip
+  const [isDraggingMultiTooltip, setIsDraggingMultiTooltip] = useState(false);
+  const multiDragStartRef = useRef<{ clientX: number; clientY: number; tooltipX: number; tooltipY: number } | null>(null);
+
   // Состояние для перетаскивания Tooltip
   const [isDraggingTooltip, setIsDraggingTooltip] = useState(false);
   const dragStartRef = useRef<{ clientX: number, clientY: number, tooltipX: number, tooltipY: number } | null>(null);
@@ -142,6 +150,45 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       };
     }
   }, [isDraggingTooltip]);
+
+  // Перетаскивание multi-select tooltip
+  useEffect(() => {
+    if (isDraggingMultiTooltip) {
+      const handleMouseMove = (e: MouseEvent) => {
+        const startRef = multiDragStartRef.current;
+        if (!startRef) return;
+        const dx = e.clientX - startRef.clientX;
+        const dy = e.clientY - startRef.clientY;
+        setMultiSelectTooltip(prev => {
+          const current = multiDragStartRef.current;
+          if (!prev || !current) return prev;
+          return { x: current.tooltipX + dx, y: current.tooltipY + dy };
+        });
+      };
+      const handleMouseUp = () => {
+        setIsDraggingMultiTooltip(false);
+        multiDragStartRef.current = null;
+      };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDraggingMultiTooltip]);
+
+  const handleMultiTooltipMouseDown = (e: React.MouseEvent) => {
+    if (!multiSelectTooltip) return;
+    if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('button')) return;
+    setIsDraggingMultiTooltip(true);
+    multiDragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      tooltipX: multiSelectTooltip.x,
+      tooltipY: multiSelectTooltip.y
+    };
+  };
 
   // Узел с зелёной обводкой: открытый тултип или последний узел с закрытым тултипом
   const greenHighlightNodeId = tooltip?.node?.id ?? lastTooltipHighlightedNodeId;
@@ -442,6 +489,110 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     setLastTooltipHighlightedNodeId(null);
   };
 
+  // === Множественные операции (для multi-select) ===
+  const addIncomingNodesMulti = (nodeIds: Set<string>) => {
+    if (!graphData) return;
+    const newFilteredIds = getEnsureVisibleSet();
+    for (const id of nodeIds) newFilteredIds.add(id);
+    let addedCount = 0;
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      if (nodeIds.has(targetId) && !nodeIds.has(sourceId)) {
+        newFilteredIds.add(sourceId);
+        addedCount++;
+      }
+    }
+    if (addedCount > 0) {
+      setFilteredItemIds(newFilteredIds);
+      const newFocusSet = new Set(focusedNodeIds);
+      for (const id of nodeIds) newFocusSet.add(id);
+      setFocusedNodeIds(newFocusSet);
+    }
+  };
+
+  const addOutgoingNodesMulti = (nodeIds: Set<string>) => {
+    if (!graphData) return;
+    const newFilteredIds = getEnsureVisibleSet();
+    for (const id of nodeIds) newFilteredIds.add(id);
+    let addedCount = 0;
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      if (nodeIds.has(sourceId) && !nodeIds.has(targetId)) {
+        newFilteredIds.add(targetId);
+        addedCount++;
+      }
+    }
+    if (addedCount > 0) {
+      setFilteredItemIds(newFilteredIds);
+      const newFocusSet = new Set(focusedNodeIds);
+      for (const id of nodeIds) newFocusSet.add(id);
+      setFocusedNodeIds(newFocusSet);
+    }
+  };
+
+  const removeIncomingNodesMulti = (nodeIds: Set<string>) => {
+    if (!graphData) return;
+    const newFilteredIds = getEnsureVisibleSet();
+    const newFocusSet = new Set<string>(focusedNodeIds);
+    let removedCount = 0;
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      if (nodeIds.has(targetId) && !nodeIds.has(sourceId)) {
+        if (newFilteredIds.has(sourceId)) { newFilteredIds.delete(sourceId); removedCount++; }
+        if (newFocusSet.has(sourceId)) newFocusSet.delete(sourceId);
+      }
+    }
+    if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
+      if (newFilteredIds.size === 0) for (const id of nodeIds) { newFilteredIds.add(id); break; }
+      setFocusedNodeIds(newFocusSet);
+      setFilteredItemIds(new Set(newFilteredIds));
+    }
+  };
+
+  const removeOutgoingNodesMulti = (nodeIds: Set<string>) => {
+    if (!graphData) return;
+    const newFilteredIds = getEnsureVisibleSet();
+    const newFocusSet = new Set<string>(focusedNodeIds);
+    let removedCount = 0;
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      if (nodeIds.has(sourceId) && !nodeIds.has(targetId)) {
+        if (newFilteredIds.has(targetId)) { newFilteredIds.delete(targetId); removedCount++; }
+        if (newFocusSet.has(targetId)) newFocusSet.delete(targetId);
+      }
+    }
+    if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
+      if (newFilteredIds.size === 0) for (const id of nodeIds) { newFilteredIds.add(id); break; }
+      setFocusedNodeIds(newFocusSet);
+      setFilteredItemIds(new Set(newFilteredIds));
+    }
+  };
+
+  const removeNodesFromGraphMulti = (nodeIds: Set<string>) => {
+    const newFilteredIds = getEnsureVisibleSet();
+    const newFocusSet = new Set(focusedNodeIds);
+    for (const id of nodeIds) {
+      newFilteredIds.delete(id);
+      newFocusSet.delete(id);
+    }
+    setFilteredItemIds(newFilteredIds);
+    setFocusedNodeIds(newFocusSet);
+    setMultiSelectTooltip(null);
+    setMultiSelectedNodeIds(new Set());
+  };
+
   // Трассировка изменений filteredItemIds
   useEffect(() => {
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] filteredItemIds изменился:`, {
@@ -719,7 +870,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
   const displayGraphData = finalFilteredGraphData;
 
-  // Обновление обводки узлов: зелёный = открытый тултип или последний узел с закрытым тултипом
+  // Обновление обводки узлов: зелёный = тултип/multi-select, жёлтый = clickHistory
   useEffect(() => {
     const svgEl = svgRef.current;
     if (!svgEl?.children?.length) return;
@@ -728,6 +879,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     const nodeContainer = container.children[2];
     const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
     const TOOLTIP_STROKE = '#22c55e';
+    const MULTI_SELECT_STROKE = '#22c55e';
     for (let i = 0; i < nodeContainer.children.length; i++) {
       const g = nodeContainer.children[i] as SVGGElement & { __data__?: { id: string } };
       const d = g.__data__;
@@ -735,10 +887,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       const shape = g.querySelector('rect, circle');
       if (!shape) continue;
       const isTooltipNode = greenHighlightNodeId != null && d.id === greenHighlightNodeId;
+      const isMultiSelected = multiSelectedNodeIds.size > 0 && multiSelectedNodeIds.has(d.id);
       let strokeColor: string;
       let strokeWidth: number;
       if (isTooltipNode) {
         strokeColor = TOOLTIP_STROKE;
+        strokeWidth = 4;
+      } else if (isMultiSelected) {
+        strokeColor = MULTI_SELECT_STROKE;
         strokeWidth = 4;
       } else {
         const historyIndex = clickHistory.indexOf(d.id);
@@ -748,7 +904,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       shape.setAttribute('stroke', strokeColor);
       shape.setAttribute('stroke-width', String(strokeWidth));
     }
-  }, [greenHighlightNodeId, clickHistory, displayGraphData]);
+  }, [greenHighlightNodeId, clickHistory, displayGraphData, multiSelectedNodeIds]);
 
   useEffect(() => {
     const renderStart = performance.now();
@@ -1046,17 +1202,90 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         }
       });
 
+    // Rubber-band selection rect (рисуется поверх всего в SVG)
+    const selectionRect = svg.append("rect")
+      .attr("class", "selection-rect")
+      .attr("fill", "rgba(59, 130, 246, 0.15)")
+      .attr("stroke", "#3b82f6")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "6 3")
+      .attr("rx", 3)
+      .style("pointer-events", "none")
+      .style("display", "none");
+
+    let isSelecting = false;
+    let selStart: [number, number] = [0, 0];
+
+    bgRect
+      .on("mousedown.selection", function (event: MouseEvent) {
+        if (!event.shiftKey || event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        isSelecting = true;
+        selStart = d3.pointer(event, svgRef.current!);
+        selectionRect
+          .attr("x", selStart[0]).attr("y", selStart[1])
+          .attr("width", 0).attr("height", 0)
+          .style("display", null);
+      });
+
+    d3.select(document)
+      .on("mousemove.selection", function (event: MouseEvent) {
+        if (!isSelecting) return;
+        const cur = d3.pointer(event, svgRef.current!);
+        const x = Math.min(selStart[0], cur[0]);
+        const y = Math.min(selStart[1], cur[1]);
+        const w = Math.abs(cur[0] - selStart[0]);
+        const h = Math.abs(cur[1] - selStart[1]);
+        selectionRect.attr("x", x).attr("y", y).attr("width", w).attr("height", h);
+      })
+      .on("mouseup.selection", function (event: MouseEvent) {
+        if (!isSelecting) return;
+        isSelecting = false;
+        selectionRect.style("display", "none");
+
+        const cur = d3.pointer(event, svgRef.current!);
+        const x1 = Math.min(selStart[0], cur[0]);
+        const y1 = Math.min(selStart[1], cur[1]);
+        const x2 = Math.max(selStart[0], cur[0]);
+        const y2 = Math.max(selStart[1], cur[1]);
+
+        if (x2 - x1 < 5 && y2 - y1 < 5) return;
+
+        const currentTransform = d3.zoomTransform(svg.node()!);
+        const selected = new Set<string>();
+        node.each(function (d: any) {
+          const sx = currentTransform.applyX(d.x);
+          const sy = currentTransform.applyY(d.y);
+          if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
+            selected.add(d.id);
+          }
+        });
+
+        if (selected.size > 0) {
+          setMultiSelectedNodeIds(selected);
+          const svgRect = svgRef.current?.getBoundingClientRect();
+          if (svgRect) {
+            setMultiSelectTooltip({
+              x: (x1 + x2) / 2 - 100,
+              y: y2 + 10
+            });
+          }
+          setTooltip(null);
+          setLastTooltipHighlightedNodeId(null);
+        } else {
+          setMultiSelectedNodeIds(new Set());
+          setMultiSelectTooltip(null);
+        }
+      });
+
     // Setup zoom and pan
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .filter((event: any) => {
-        // For wheel: allow zoom without CTRL/CMD
-        if (event.type === 'wheel') {
-          return true;
-        }
-        // For mousedown: allow pan with left button only if clicking on background rect
+        if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
-          // Allow pan only if clicking on the background rect (not on nodes or links)
+          if (event.shiftKey) return false;
           return event.button === 0 && event.target === bgRect.node();
         }
         return true;
@@ -1071,7 +1300,6 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     svg.on("wheel.zoom", function (event: WheelEvent) {
       event.preventDefault();
       const point = d3.pointer(event, svgRef.current);
-      // Чувствительность увеличена в 1.5 раза: 0.1 * 1.5 = 0.15
       const sensitivity = 0.15;
       const scale = event.deltaY > 0 ? (1 - sensitivity) : (1 + sensitivity);
       svg.transition()
@@ -1186,10 +1414,11 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     const renderEnd = performance.now();
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect отрисовки завершён за ${(renderEnd - renderStart).toFixed(1)}ms (создание симуляции, тики выполняются асинхронно)`);
 
-    // Cleanup: остановить симуляцию при размонтировании или смене данных
+    // Cleanup: остановить симуляцию и убрать document listeners при размонтировании или смене данных
     return () => {
       console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Cleanup: остановка симуляции`);
       simulation.stop();
+      d3.select(document).on("mousemove.selection", null).on("mouseup.selection", null);
     };
   }, [displayGraphData, clickHistory]);
 
@@ -1469,6 +1698,76 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                   title="Убрать этот узел с графа"
                 >
                   Убрать узел с графа
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Multi-selection Tooltip */}
+          {multiSelectTooltip && multiSelectedNodeIds.size > 0 && (
+            <div
+              className={`absolute bg-slate-800 border border-green-600/50 rounded-lg p-3 shadow-2xl z-50 min-w-[220px] max-w-[380px] ${isDraggingMultiTooltip ? 'cursor-grabbing' : 'cursor-grab'}`}
+              style={{ left: multiSelectTooltip.x, top: multiSelectTooltip.y, userSelect: 'none' }}
+              onMouseDown={handleMultiTooltipMouseDown}
+            >
+              <div className="absolute top-1 right-1">
+                <button
+                  onClick={() => { setMultiSelectTooltip(null); setMultiSelectedNodeIds(new Set()); }}
+                  className="text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
+                  title="Закрыть"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="text-xs space-y-1.5 pr-6">
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400 font-bold">Выделено: {multiSelectedNodeIds.size}</span>
+                </div>
+                <div className="max-h-[80px] overflow-y-auto text-[10px] text-slate-300 font-mono space-y-0.5">
+                  {Array.from(multiSelectedNodeIds).map(id => (
+                    <div key={id} className="truncate">{id.split('.').pop() || id}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 space-y-2 border-t border-slate-700 pt-2 shrink-0">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addIncomingNodesMulti(multiSelectedNodeIds)}
+                    className="flex-1 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow text-center font-bold"
+                    title="Добавить на экран всех, кто вызывает выделенные узлы"
+                  >
+                    ← Callers
+                  </button>
+                  <button
+                    onClick={() => addOutgoingNodesMulti(multiSelectedNodeIds)}
+                    className="flex-1 text-[10px] bg-teal-600 hover:bg-teal-500 text-white px-2 py-1 rounded shadow text-center font-bold"
+                    title="Добавить на экран всех, кого вызывают выделенные узлы"
+                  >
+                    Callees →
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => removeIncomingNodesMulti(multiSelectedNodeIds)}
+                    className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
+                    title="Убрать с экрана вызывающих для выделенных узлов"
+                  >
+                    x Callers
+                  </button>
+                  <button
+                    onClick={() => removeOutgoingNodesMulti(multiSelectedNodeIds)}
+                    className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
+                    title="Убрать с экрана вызываемых для выделенных узлов"
+                  >
+                    Callees x
+                  </button>
+                </div>
+                <button
+                  onClick={() => removeNodesFromGraphMulti(multiSelectedNodeIds)}
+                  className="w-full text-[10px] bg-red-900/50 hover:bg-red-800/60 text-red-200 border border-red-700/50 px-2 py-1 rounded shadow text-center font-bold"
+                  title="Убрать выделенные узлы с графа"
+                >
+                  Убрать {multiSelectedNodeIds.size} узлов с графа
                 </button>
               </div>
             </div>

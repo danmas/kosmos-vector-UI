@@ -242,6 +242,128 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     return relatedIds;
   };
 
+  // Функция добавления всех зависящих узлов (кто вызывает данный узел)
+  const addIncomingNodes = (nodeId: string) => {
+    if (!graphData) return;
+    const newFilteredIds = new Set<string>(filteredItemIds);
+    newFilteredIds.add(nodeId);
+    let addedCount = 0;
+
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+
+      if (targetId === nodeId) {
+        newFilteredIds.add(sourceId);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      setFilteredItemIds(newFilteredIds);
+      const newFocusSet = new Set(focusedNodeIds);
+      newFocusSet.add(nodeId);
+      setFocusedNodeIds(newFocusSet);
+      console.log(`[KnowledgeGraph] Added ${addedCount} incoming nodes for ${nodeId}`);
+    }
+  };
+
+  // Функция добавления всех узлов, от которых зависит данный узел (кого он вызывает)
+  const addOutgoingNodes = (nodeId: string) => {
+    if (!graphData) return;
+    const newFilteredIds = new Set<string>(filteredItemIds);
+    newFilteredIds.add(nodeId);
+    let addedCount = 0;
+
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+
+      if (sourceId === nodeId) {
+        newFilteredIds.add(targetId);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      setFilteredItemIds(newFilteredIds);
+      const newFocusSet = new Set(focusedNodeIds);
+      newFocusSet.add(nodeId);
+      setFocusedNodeIds(newFocusSet);
+      console.log(`[KnowledgeGraph] Added ${addedCount} outgoing nodes for ${nodeId}`);
+    }
+  };
+
+  // Функция удаления всех вызывающих узлов с экрана
+  const removeIncomingNodes = (nodeId: string) => {
+    if (!graphData) return;
+    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFocusSet = new Set<string>(focusedNodeIds);
+    let removedCount = 0;
+
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+
+      if (targetId === nodeId && sourceId !== nodeId) {
+        if (newFilteredIds.has(sourceId)) {
+          newFilteredIds.delete(sourceId);
+          removedCount++;
+        }
+        if (newFocusSet.has(sourceId)) {
+          newFocusSet.delete(sourceId);
+        }
+      }
+    }
+
+    if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
+      setFilteredItemIds(newFilteredIds);
+      setFocusedNodeIds(newFocusSet);
+      console.log(`[KnowledgeGraph] Removed ${removedCount} incoming nodes for ${nodeId}`);
+    }
+  };
+
+  // Функция удаления всех вызываемых узлов с экрана
+  const removeOutgoingNodes = (nodeId: string) => {
+    if (!graphData) return;
+    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFocusSet = new Set<string>(focusedNodeIds);
+    let removedCount = 0;
+
+    for (const link of graphData.links) {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) continue;
+
+      const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+
+      if (sourceId === nodeId && targetId !== nodeId) {
+        if (newFilteredIds.has(targetId)) {
+          newFilteredIds.delete(targetId);
+          removedCount++;
+        }
+        if (newFocusSet.has(targetId)) {
+          newFocusSet.delete(targetId);
+        }
+      }
+    }
+
+    if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
+      setFilteredItemIds(newFilteredIds);
+      setFocusedNodeIds(newFocusSet);
+      console.log(`[KnowledgeGraph] Removed ${removedCount} outgoing nodes for ${nodeId}`);
+    }
+  };
+
   // Трассировка изменений filteredItemIds
   useEffect(() => {
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] filteredItemIds изменился:`, {
@@ -1038,8 +1160,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           <button
             onClick={() => setIsFilterDialogOpen(true)}
             className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${(typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
-                ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+              ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
               }`}
             title="Фильтры по типам и тегам"
           >
@@ -1166,6 +1288,40 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                   </div>
                 )}
               </div>
+              <div className="mt-3 space-y-2 border-t border-slate-700 pt-2 shrink-0">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addIncomingNodes(tooltip.node.id)}
+                    className="flex-1 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow text-center font-bold"
+                    title="Добавить на экран всех, кто вызывает (использует) этот узел"
+                  >
+                    ← Callers
+                  </button>
+                  <button
+                    onClick={() => addOutgoingNodes(tooltip.node.id)}
+                    className="flex-1 text-[10px] bg-teal-600 hover:bg-teal-500 text-white px-2 py-1 rounded shadow text-center font-bold"
+                    title="Добавить на экран всех, кого вызывает данный узел"
+                  >
+                    Callees →
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => removeIncomingNodes(tooltip.node.id)}
+                    className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
+                    title="Убрать с экрана текущих вызывающих этого узла"
+                  >
+                    x Callers
+                  </button>
+                  <button
+                    onClick={() => removeOutgoingNodes(tooltip.node.id)}
+                    className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
+                    title="Убрать с экрана текущие узлы, которые вызываются этим узлом"
+                  >
+                    Callees x
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1261,8 +1417,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                         onClick={handleVectorizeModalItem}
                         disabled={vectorizingModalItem}
                         className={`text-xs px-2 py-0.5 rounded transition-colors font-bold ${modalItemIsVectorized
-                            ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                            : 'bg-slate-600 hover:bg-cyan-600 text-slate-300 hover:text-white'
+                          ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                          : 'bg-slate-600 hover:bg-cyan-600 text-slate-300 hover:text-white'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                         title={modalItemIsVectorized ? 'Векторизован. Нажмите для перевекторизации' : 'Векторизовать'}
                       >

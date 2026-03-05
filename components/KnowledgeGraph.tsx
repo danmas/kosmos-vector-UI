@@ -430,6 +430,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
   };
 
+  // Убрать узел с графа и закрыть тултип
+  const removeNodeFromGraph = (nodeId: string) => {
+    const newFilteredIds = getEnsureVisibleSet();
+    newFilteredIds.delete(nodeId);
+    const newFocusSet = new Set(focusedNodeIds);
+    newFocusSet.delete(nodeId);
+    setFilteredItemIds(newFilteredIds);
+    setFocusedNodeIds(newFocusSet);
+    setTooltip(null);
+    setLastTooltipHighlightedNodeId(null);
+  };
+
   // Трассировка изменений filteredItemIds
   useEffect(() => {
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] filteredItemIds изменился:`, {
@@ -1451,6 +1463,13 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                     Callees x
                   </button>
                 </div>
+                <button
+                  onClick={() => removeNodeFromGraph(tooltip.node.id)}
+                  className="w-full text-[10px] bg-red-900/50 hover:bg-red-800/60 text-red-200 border border-red-700/50 px-2 py-1 rounded shadow text-center font-bold"
+                  title="Убрать этот узел с графа"
+                >
+                  Убрать узел с графа
+                </button>
               </div>
             </div>
           )}

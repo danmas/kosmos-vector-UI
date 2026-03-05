@@ -80,13 +80,15 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [sessionClickHistory, setSessionClickHistory] = useState<string[]>([]);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
+  const [hiddenLinkTypes, setHiddenLinkTypes] = useState<Set<string>>(new Set());
+  const [showLegend, setShowLegend] = useState(false);
 
   // Состояния для модального окна деталей узла
   const [modalNodeId, setModalNodeId] = useState<string | null>(null);
   const [modalItemData, setModalItemData] = useState<AiItem | null>(null);
   const [loadingModalData, setLoadingModalData] = useState(false);
   const [modalActiveTab, setModalActiveTab] = useState<'L0' | 'L1' | 'L2'>('L1');
-  
+
   const [modalItemTags, setModalItemTags] = useState<import('../types').Tag[]>([]);
   const [loadingModalTags, setLoadingModalTags] = useState(false);
   const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
@@ -101,6 +103,25 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     x: number;
     y: number;
   } | null>(null);
+
+  const availableLinkTypes = useMemo(() => {
+    if (!graphData?.links) return [];
+    const types = new Set<string>();
+    for (const link of graphData.links) {
+      const type = (link as any).label || (link as any).type;
+      if (type) types.add(type);
+    }
+    return Array.from(types).sort();
+  }, [graphData]);
+
+  const toggleLinkType = (type: string) => {
+    setHiddenLinkTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
 
   // Функция открытия модального окна с деталями узла
   const openNodeModal = async (nodeId: string) => {
@@ -153,7 +174,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Функция векторизации элемента в модальном окне
   const handleVectorizeModalItem = async () => {
     if (!modalNodeId || !currentContextCode) return;
-    
+
     setVectorizingModalItem(true);
     try {
       const result = await apiClient.vectorizeAiItems({
@@ -161,10 +182,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         force: true,
         contextCode: currentContextCode,
       });
-      
+
       setModalItemIsVectorized(true);
       console.log(`[KnowledgeGraph] Векторизован: ${modalNodeId} (${result.chunksUpdated} чанков)`);
-      
+
       alert(`Векторизация выполнена: ${result.chunksUpdated} чанков обновлено`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Ошибка векторизации';
@@ -481,6 +502,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
     const filteredLinks = graphData.links.filter(link => {
+      const linkType = (link as any).label || (link as any).type || '';
+      if (hiddenLinkTypes.has(linkType)) return false;
+
       const s = typeof link.source === 'string' ? link.source : (link.source as any)?.id;
       const t = typeof link.target === 'string' ? link.target : (link.target as any)?.id;
       return s && t && s !== t && filteredNodeIds.has(s) && filteredNodeIds.has(t);
@@ -490,7 +514,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, getItemsList]);
+  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, getItemsList, hiddenLinkTypes]);
 
   // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик) - ТЕПЕРЬ ОТКЛЮЧЕНА, 
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
@@ -689,7 +713,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     };
 
     // Создаём узлы с разными формами в зависимости от типа
-    node.each(function(d: any) {
+    node.each(function (d: any) {
       const el = d3.select(this);
       const fillColor = getNodeColor(d.type);
       const strokeColor = getStrokeColor(d.id);
@@ -1013,11 +1037,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           </button>
           <button
             onClick={() => setIsFilterDialogOpen(true)}
-            className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${
-              (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+            className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${(typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
                 ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
                 : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-            }`}
+              }`}
             title="Фильтры по типам и тегам"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1041,19 +1064,57 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             </div>
           )}
         </div>
-        <div className="flex gap-2 text-[10px] flex-wrap mt-1">
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Func</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Class</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500"></div> Method</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Struct</div>
-          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-pink-500"></div> Interface</div>
-        </div>
+        {availableLinkTypes.length > 0 && (
+          <div className="flex gap-3 text-[11px] flex-wrap mt-2 items-center">
+            <span className="text-slate-400 font-bold mr-1">Links:</span>
+            {availableLinkTypes.map(type => (
+              <label key={type} className="flex items-center gap-1 cursor-pointer hover:text-white text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={!hiddenLinkTypes.has(type)}
+                  onChange={() => toggleLinkType(type)}
+                  className="w-3 h-3 accent-blue-500 rounded bg-slate-700 border-slate-600 focus:ring-blue-600"
+                />
+                {type}
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex-1 flex overflow-hidden relative">
         {/* Graph area */}
         <div className="flex-1 bg-slate-900 overflow-hidden relative">
           <svg ref={svgRef} className="w-full h-full cursor-move"></svg>
-          
+
+          {/* Nodes Legend */}
+          <div className="absolute bottom-4 right-4 z-[40]">
+            {showLegend ? (
+              <div className="bg-slate-800 border border-slate-600 rounded shadow-2xl p-2 text-[10px] min-w-[120px]">
+                <div className="flex justify-between items-center mb-1 border-b border-slate-700 pb-1">
+                  <span className="font-bold text-slate-300">Legend</span>
+                  <button onClick={() => setShowLegend(false)} className="text-slate-500 hover:text-white px-1">✕</button>
+                </div>
+                <div className="flex flex-col gap-1.5 p-1 text-slate-300">
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div> Func</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> Class</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Method</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-teal-500"></div> Module</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Struct</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-pink-500"></div> Interface</div>
+                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-cyan-500"></div> Table</div>
+                  <div className="flex items-center gap-1.5"><div className="w-4 h-1 bg-indigo-500"></div> Column</div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowLegend(true)}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 px-3 py-1.5 rounded shadow-lg text-[10px] font-bold flex items-center gap-1"
+              >
+                Legend
+              </button>
+            )}
+          </div>
+
           {/* Persistent Tooltip - остаётся на экране до закрытия */}
           {tooltip && (
             <div
@@ -1096,7 +1157,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                 {tooltip.node.l2_desc && (
                   <div className="flex flex-col gap-1">
                     <span className="text-slate-500 shrink-0">Desc:</span>
-                    <div 
+                    <div
                       className="text-slate-300 bg-slate-900/50 rounded p-1.5 overflow-y-auto text-[11px] leading-relaxed"
                       style={{ maxHeight: 'calc(1.625em * 5)', minHeight: '1.625em' }}
                     >
@@ -1199,11 +1260,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                       <button
                         onClick={handleVectorizeModalItem}
                         disabled={vectorizingModalItem}
-                        className={`text-xs px-2 py-0.5 rounded transition-colors font-bold ${
-                          modalItemIsVectorized
+                        className={`text-xs px-2 py-0.5 rounded transition-colors font-bold ${modalItemIsVectorized
                             ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
                             : 'bg-slate-600 hover:bg-cyan-600 text-slate-300 hover:text-white'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         title={modalItemIsVectorized ? 'Векторизован. Нажмите для перевекторизации' : 'Векторизовать'}
                       >
                         {vectorizingModalItem ? '...' : 'V'}

@@ -104,6 +104,54 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     y: number;
   } | null>(null);
 
+  // Состояние для перетаскивания Tooltip
+  const [isDraggingTooltip, setIsDraggingTooltip] = useState(false);
+  const dragStartRef = useRef<{ clientX: number, clientY: number, tooltipX: number, tooltipY: number } | null>(null);
+
+  useEffect(() => {
+    if (isDraggingTooltip) {
+      const handleMouseMove = (e: MouseEvent) => {
+        const startRef = dragStartRef.current;
+        if (!startRef) return;
+        const dx = e.clientX - startRef.clientX;
+        const dy = e.clientY - startRef.clientY;
+        setTooltip((prev) => {
+          const current = dragStartRef.current;
+          if (!prev || !current) return prev;
+          return {
+            ...prev,
+            x: current.tooltipX + dx,
+            y: current.tooltipY + dy
+          };
+        });
+      };
+      const handleMouseUp = () => {
+        setIsDraggingTooltip(false);
+        dragStartRef.current = null;
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDraggingTooltip]);
+
+  const handleTooltipMouseDown = (e: React.MouseEvent) => {
+    if (!tooltip) return;
+    if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('button')) return;
+    setIsDraggingTooltip(true);
+    dragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      tooltipX: tooltip.x,
+      tooltipY: tooltip.y
+    };
+  };
+
   const availableLinkTypes = useMemo(() => {
     if (!graphData?.links) return [];
     const types = new Set<string>();
@@ -242,10 +290,20 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     return relatedIds;
   };
 
+  // Получает текущие отображаемые узлы для фиксации "ручного режима"
+  const getEnsureVisibleSet = () => {
+    if (filteredItemIds.size > 0) {
+      return new Set(filteredItemIds);
+    }
+    const currentSet = new Set<string>();
+    displayGraphData?.nodes.forEach(n => currentSet.add(n.id));
+    return currentSet;
+  };
+
   // Функция добавления всех зависящих узлов (кто вызывает данный узел)
   const addIncomingNodes = (nodeId: string) => {
     if (!graphData) return;
-    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFilteredIds = getEnsureVisibleSet();
     newFilteredIds.add(nodeId);
     let addedCount = 0;
 
@@ -274,7 +332,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Функция добавления всех узлов, от которых зависит данный узел (кого он вызывает)
   const addOutgoingNodes = (nodeId: string) => {
     if (!graphData) return;
-    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFilteredIds = getEnsureVisibleSet();
     newFilteredIds.add(nodeId);
     let addedCount = 0;
 
@@ -303,7 +361,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Функция удаления всех вызывающих узлов с экрана
   const removeIncomingNodes = (nodeId: string) => {
     if (!graphData) return;
-    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFilteredIds = getEnsureVisibleSet();
     const newFocusSet = new Set<string>(focusedNodeIds);
     let removedCount = 0;
 
@@ -326,8 +384,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
 
     if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
-      setFilteredItemIds(newFilteredIds);
+      if (newFilteredIds.size === 0) newFilteredIds.add(nodeId); // Защита от пустого массива
       setFocusedNodeIds(newFocusSet);
+      setFilteredItemIds(new Set(newFilteredIds)); // force reference update
       console.log(`[KnowledgeGraph] Removed ${removedCount} incoming nodes for ${nodeId}`);
     }
   };
@@ -335,7 +394,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // Функция удаления всех вызываемых узлов с экрана
   const removeOutgoingNodes = (nodeId: string) => {
     if (!graphData) return;
-    const newFilteredIds = new Set<string>(filteredItemIds);
+    const newFilteredIds = getEnsureVisibleSet();
     const newFocusSet = new Set<string>(focusedNodeIds);
     let removedCount = 0;
 
@@ -358,8 +417,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     }
 
     if (removedCount > 0 || newFocusSet.size !== focusedNodeIds.size) {
-      setFilteredItemIds(newFilteredIds);
+      if (newFilteredIds.size === 0) newFilteredIds.add(nodeId); // Защита от пустого массива
       setFocusedNodeIds(newFocusSet);
+      setFilteredItemIds(new Set(newFilteredIds)); // force reference update
       console.log(`[KnowledgeGraph] Removed ${removedCount} outgoing nodes for ${nodeId}`);
     }
   };
@@ -560,9 +620,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       }
     }
 
-    // 3. Определяем узлы, которые должны быть ВСЕГДА (фокус)
-    const alwaysShowIds = new Set<string>(focusedNodeIds);
-    if (focusedNodeIds.size > 0) {
+    // 3. Определяем соседей для автоматического показа только если нет ручного списка
+    const alwaysShowIds = new Set<string>();
+
+    // В ручном режиме фильтра (filteredItemIds задан) 
+    // соседи не подтягиваются автоматически. 
+    // Они подтягиваются в фокус только если активен обычный автофокус (без кастомного списка)
+    if (focusedNodeIds.size > 0 && filteredItemIds.size === 0) {
+      focusedNodeIds.forEach(id => alwaysShowIds.add(id));
       graphData.links.forEach(link => {
         const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
         const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
@@ -584,41 +649,35 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     // 4. ОСНОВНАЯ ФИЛЬТРАЦИЯ
     const filteredNodes = graphData.nodes.filter(node => {
-      // Сфокусированные узлы и их соседи - всегда
+
+      // РУЧНОЙ РЕЖИМ (filteredItemIds не пуст): отображаем ТОЛЬКО то, что в списке или сам узел из фокуса
+      if (filteredItemIds.size > 0) {
+        return filteredItemIds.has(node.id) || focusedNodeIds.has(node.id);
+      }
+
+      // Сфокусированные узлы и их соседи - всегда (они добавляются поверх) в авто-режиме
       if (alwaysShowIds.has(node.id)) return true;
 
-      // Если есть поиск в самом графе - он главный
+      // АВТОМАТИЧЕСКИЙ РЕЖИМ (по фильтрам)
       if (graphRegex) {
-        return graphRegex.test(node.id);
+        // Если поиска в самом графе - применяем его
+        if (!graphRegex.test(node.id)) return false;
+      } else if (inspectorSearch.trim()) {
+        // Если поиска в графе нет, но есть фильтр в Инспекторе
+        if (inspectorRegex && !inspectorRegex.test(node.id)) return false;
       }
 
-      // Если есть явно установленный фильтр filteredItemIds (например, Alt+клик)
-      if (filteredItemIds.size > 0) {
-        return filteredItemIds.has(node.id);
-      }
-
-      // Если поиска в графе нет, но есть фильтр в Инспекторе
-      if (inspectorSearch.trim()) {
-        // Проверяем по Regex
-        return inspectorRegex && inspectorRegex.test(node.id);
-      }
-
-      // Фильтр по типам (если включён)
+      // Фильтр по типам
       if (typeFilterEnabled && selectedTypes.size > 0) {
-        if (!selectedTypes.has(node.type)) {
-          return false;
-        }
+        if (!selectedTypes.has(node.type)) return false;
       }
 
-      // Фильтр по тегам (если включён)
+      // Фильтр по тегам
       if (tagFilterEnabled && selectedTagCodes.size > 0) {
         const nodeTags = itemTagsMap.get(node.id);
-        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) {
-          return false;
-        }
+        if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) return false;
       }
 
-      // Если фильтров нет вообще - показываем всё
       return true;
     });
 
@@ -884,30 +943,52 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .style("pointer-events", "none")
       .style("text-shadow", "2px 2px 4px #000");
 
-    // Persistent tooltip - показывается после удержания курсора, остаётся на экране до закрытия
+    // Persistent tooltip - показывается после удержания курсора неподвижно 1 сек, остаётся на экране до закрытия
     node
       .on("mouseenter", (event: any, d: any) => {
-        // Очищаем предыдущий timeout если есть
-        if (tooltipTimeoutRef.current) {
-          clearTimeout(tooltipTimeoutRef.current);
-        }
-        // Запоминаем позицию курсора в момент наведения
-        const clientX = event.clientX;
-        const clientY = event.clientY;
-        // Запускаем таймер на появление tooltip
-        tooltipTimeoutRef.current = setTimeout(() => {
-          const svgRect = svgRef.current?.getBoundingClientRect();
-          if (svgRect) {
-            setTooltip({
-              node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
-              x: clientX - svgRect.left + 20,
-              y: clientY - svgRect.top - 10
-            });
+        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+
+        // Не запускаем таймер если зажата кнопка мыши (drag)
+        if (event.buttons > 0) return;
+
+        const nodeRef = { x: event.clientX, y: event.clientY };
+
+        const startTimer = (clientX: number, clientY: number) => {
+          return setTimeout(() => {
+            const svgRect = svgRef.current?.getBoundingClientRect();
+            if (svgRect) {
+              setTooltip({
+                node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
+                x: clientX - svgRect.left + 20,
+                y: clientY - svgRect.top - 10
+              });
+            }
+          }, 1000);
+        };
+
+        tooltipTimeoutRef.current = startTimer(event.clientX, event.clientY);
+
+        d3.select(event.currentTarget).on("mousemove.tooltip", (moveEvent: any) => {
+          // Если зажата кнопка мыши — сбрасываем таймер и не перезапускаем
+          if (moveEvent.buttons > 0) {
+            if (tooltipTimeoutRef.current) {
+              clearTimeout(tooltipTimeoutRef.current);
+              tooltipTimeoutRef.current = null;
+            }
+            return;
           }
-        }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
+          const dx = moveEvent.clientX - nodeRef.x;
+          const dy = moveEvent.clientY - nodeRef.y;
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            nodeRef.x = moveEvent.clientX;
+            nodeRef.y = moveEvent.clientY;
+            if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+            tooltipTimeoutRef.current = startTimer(moveEvent.clientX, moveEvent.clientY);
+          }
+        });
       })
-      .on("mouseleave", () => {
-        // Очищаем timeout при уходе курсора — tooltip не появится если ушли раньше
+      .on("mouseleave", (event: any) => {
+        d3.select(event.currentTarget).on("mousemove.tooltip", null);
         if (tooltipTimeoutRef.current) {
           clearTimeout(tooltipTimeoutRef.current);
           tooltipTimeoutRef.current = null;
@@ -1106,7 +1187,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               type="text"
               placeholder="Filter graph... (e.g. ^carl_.*|auth_.*)"
               value={graphSearch}
-              onChange={(e) => setGraphSearch(e.target.value)}
+              onChange={(e) => {
+                setGraphSearch(e.target.value);
+                if (filteredItemIds.size > 0) setFilteredItemIds(new Set());
+              }}
               onFocus={() => setShowHistory(true)}
               className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-sm text-white focus:border-blue-500 outline-none w-64 shadow-inner pr-8"
             />
@@ -1240,8 +1324,9 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           {/* Persistent Tooltip - остаётся на экране до закрытия */}
           {tooltip && (
             <div
-              className="absolute bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-2xl z-50 min-w-[200px] max-w-[350px]"
-              style={{ left: tooltip.x, top: tooltip.y }}
+              className={`absolute bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-2xl z-50 min-w-[200px] max-w-[350px] ${isDraggingTooltip ? 'cursor-grabbing' : 'cursor-grab'}`}
+              style={{ left: tooltip.x, top: tooltip.y, userSelect: 'none' }}
+              onMouseDown={handleTooltipMouseDown}
             >
               {/* Кнопки в правом верхнем углу (вертикально) */}
               <div className="absolute top-1 right-1 flex flex-col items-center gap-0.5">

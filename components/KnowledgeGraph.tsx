@@ -320,7 +320,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
       const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
 
-      if (targetId === nodeId) {
+      if (targetId === nodeId && sourceId !== nodeId) {
         newFilteredIds.add(sourceId);
         addedCount++;
       }
@@ -349,7 +349,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
       const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
 
-      if (sourceId === nodeId) {
+      if (sourceId === nodeId && targetId !== nodeId) {
         newFilteredIds.add(targetId);
         addedCount++;
       }

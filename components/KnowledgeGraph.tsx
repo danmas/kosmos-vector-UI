@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { AiItemType, AiItem } from '../types';
 import { getGraphWithFallback, GraphData, apiClient } from '../services/apiClient';
@@ -17,6 +17,27 @@ const GRAPH_SETTINGS = {
   /** Задержка появления tooltip при наведении на узел (мс) */
   TOOLTIP_DELAY_MS: 1000,
 };
+
+// Функция для получения цвета узла по типу (статическая)
+const getNodeColor = (type: string): string => {
+  switch (type) {
+    case AiItemType.FUNCTION: return "#3b82f6"; // blue
+    case AiItemType.CLASS: return "#10b981"; // emerald
+    case AiItemType.METHOD: return "#a855f7"; // purple
+    case AiItemType.MODULE: return "#14b8a6"; // teal
+    case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
+    case AiItemType.INTERFACE: return "#ec4899"; // pink
+    case AiItemType.TABLE: return "#06b6d4"; // cyan
+    case AiItemType.TABLE_COLUMN: return "#6366f1"; // indigo
+    default: return "#64748b";
+  }
+};
+
+// Жёлтые оттенки для истории кликов (5 уровней)
+const YELLOW_SHADES = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
+const TOOLTIP_STROKE = '#22c55e';
+const MULTI_SELECT_STROKE = '#22c55e';
+const DEFAULT_STROKE = '#1e293b';
 
 // Функция для форматирования времени с начала загрузки страницы
 let pageLoadTime = performance.now();
@@ -70,6 +91,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const { getGraph, setGraph, currentContextCode, getItemsList } = useDataCache();
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // === REFS для инкрементального обновления графа ===
+  const simulationRef = useRef<d3.Simulation<any, any> | null>(null);
+  const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
+  const containerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const isInitializedRef = useRef(false);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -593,6 +622,151 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     setMultiSelectedNodeIds(new Set());
   };
 
+  // === ОБРАБОТЧИКИ СОБЫТИЙ УЗЛОВ (для инкрементального обновления) ===
+
+  // Обработчик клика по узлу
+  const handleNodeClick = useCallback((event: any, d: any) => {
+    addToClickHistory(d.id);
+    addToSessionHistory(d.id);
+    setLastTooltipHighlightedNodeId(null);
+
+    // Alt+клик — оставляем ТОЛЬКО этот узел и его связи
+    if (event.altKey) {
+      event.stopPropagation();
+      const relatedNodes = findRelatedNodes(d.id);
+      setGraphSearch('');
+      setFilteredItemIds(relatedNodes);
+      setFocusedNodeIds(new Set([d.id]));
+      return;
+    }
+
+    // Ctrl+клик — добавляем все связанные узлы к фильтру
+    if (event.ctrlKey || event.metaKey) {
+      event.stopPropagation();
+      const relatedNodes = findRelatedNodes(d.id);
+      const newFilteredIds = new Set<string>(filteredItemIds);
+      for (const id of relatedNodes) {
+        newFilteredIds.add(id);
+      }
+      setFilteredItemIds(newFilteredIds);
+      const newFocusSet = new Set(focusedNodeIds);
+      newFocusSet.add(d.id);
+      setFocusedNodeIds(newFocusSet);
+    }
+  }, [filteredItemIds, focusedNodeIds, findRelatedNodes, setGraphSearch, setFilteredItemIds]);
+
+  // Обработчик двойного клика
+  const handleNodeDblClick = useCallback((event: any, d: any) => {
+    event.stopPropagation();
+    addToClickHistory(d.id);
+    addToSessionHistory(d.id);
+    if (focusedNodeIds.has(d.id)) {
+      const newSet = new Set(focusedNodeIds);
+      newSet.delete(d.id);
+      setFocusedNodeIds(newSet);
+    } else {
+      setFocusedNodeIds(new Set([d.id]));
+    }
+  }, [focusedNodeIds]);
+
+  // Обработчик наведения на узел (tooltip)
+  const handleNodeMouseEnter = useCallback((event: any, d: any) => {
+    if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+    if (event.buttons > 0) return;
+
+    const nodeRef = { x: event.clientX, y: event.clientY };
+
+    const startTimer = (clientX: number, clientY: number) => {
+      return setTimeout(() => {
+        const svgRect = svgRef.current?.getBoundingClientRect();
+        if (svgRect) {
+          setTooltip({
+            node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
+            x: clientX - svgRect.left + 20,
+            y: clientY - svgRect.top - 10
+          });
+          setLastTooltipHighlightedNodeId(d.id);
+        }
+      }, GRAPH_SETTINGS.TOOLTIP_DELAY_MS);
+    };
+
+    tooltipTimeoutRef.current = startTimer(event.clientX, event.clientY);
+
+    d3.select(event.currentTarget).on("mousemove.tooltip", (moveEvent: any) => {
+      if (moveEvent.buttons > 0) {
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+          tooltipTimeoutRef.current = null;
+        }
+        return;
+      }
+      const dx = moveEvent.clientX - nodeRef.x;
+      const dy = moveEvent.clientY - nodeRef.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        nodeRef.x = moveEvent.clientX;
+        nodeRef.y = moveEvent.clientY;
+        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+        tooltipTimeoutRef.current = startTimer(moveEvent.clientX, moveEvent.clientY);
+      }
+    });
+  }, []);
+
+  // Обработчик ухода курсора с узла
+  const handleNodeMouseLeave = useCallback((event: any) => {
+    d3.select(event.currentTarget).on("mousemove.tooltip", null);
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+  }, []);
+
+  // === ФУНКЦИЯ СОЗДАНИЯ ФОРМЫ УЗЛА ===
+  const createNodeShape = useCallback((el: d3.Selection<SVGGElement, any, any, any>, d: any, clickHistory: string[]) => {
+    const fillColor = getNodeColor(d.type);
+    const historyIndex = clickHistory.indexOf(d.id);
+    const strokeColor = historyIndex !== -1 ? YELLOW_SHADES[historyIndex] : DEFAULT_STROKE;
+    const strokeWidth = historyIndex !== -1 ? 4 : 2;
+
+    if (d.type === AiItemType.TABLE) {
+      const size = 40;
+      el.append("rect")
+        .attr("width", size)
+        .attr("height", size)
+        .attr("x", -size / 2)
+        .attr("y", -size / 2)
+        .attr("fill", fillColor)
+        .attr("stroke", strokeColor)
+        .attr("stroke-width", strokeWidth);
+    } else if (d.type === AiItemType.TABLE_COLUMN) {
+      const width = 40;
+      const height = width / 3;
+      el.append("rect")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("x", -width / 2)
+        .attr("y", -height / 2)
+        .attr("fill", fillColor)
+        .attr("stroke", strokeColor)
+        .attr("stroke-width", strokeWidth);
+    } else {
+      el.append("circle")
+        .attr("r", 20)
+        .attr("fill", fillColor)
+        .attr("stroke", strokeColor)
+        .attr("stroke-width", strokeWidth);
+    }
+
+    // Метка узла
+    el.append("text")
+      .text(d.id.split('.').pop() || d.id)
+      .attr("x", 25)
+      .attr("y", 5)
+      .attr("fill", "#cbd5e1")
+      .attr("font-size", "12px")
+      .style("pointer-events", "none")
+      .style("text-shadow", "2px 2px 4px #000");
+  }, []);
+
   // Трассировка изменений filteredItemIds
   useEffect(() => {
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] filteredItemIds изменился:`, {
@@ -870,339 +1044,52 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
   const displayGraphData = finalFilteredGraphData;
 
-  // Обновление обводки узлов: зелёный = тултип/multi-select, жёлтый = clickHistory
+  // === USEEFFECT ИНИЦИАЛИЗАЦИИ SVG (один раз) ===
   useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl?.children?.length) return;
-    const container = svgEl.children[1] as SVGGElement | undefined;
-    if (!container?.children || container.children.length < 3) return;
-    const nodeContainer = container.children[2];
-    const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
-    const TOOLTIP_STROKE = '#22c55e';
-    const MULTI_SELECT_STROKE = '#22c55e';
-    for (let i = 0; i < nodeContainer.children.length; i++) {
-      const g = nodeContainer.children[i] as SVGGElement & { __data__?: { id: string } };
-      const d = g.__data__;
-      if (!d) continue;
-      const shape = g.querySelector('rect, circle');
-      if (!shape) continue;
-      const isTooltipNode = greenHighlightNodeId != null && d.id === greenHighlightNodeId;
-      const isMultiSelected = multiSelectedNodeIds.size > 0 && multiSelectedNodeIds.has(d.id);
-      let strokeColor: string;
-      let strokeWidth: number;
-      if (isTooltipNode) {
-        strokeColor = TOOLTIP_STROKE;
-        strokeWidth = 4;
-      } else if (isMultiSelected) {
-        strokeColor = MULTI_SELECT_STROKE;
-        strokeWidth = 4;
-      } else {
-        const historyIndex = clickHistory.indexOf(d.id);
-        strokeColor = historyIndex !== -1 ? yellowShades[historyIndex] : '#1e293b';
-        strokeWidth = historyIndex !== -1 ? 4 : 2;
-      }
-      shape.setAttribute('stroke', strokeColor);
-      shape.setAttribute('stroke-width', String(strokeWidth));
-    }
-  }, [greenHighlightNodeId, clickHistory, displayGraphData, multiSelectedNodeIds]);
+    if (isLoading || !svgRef.current || isInitializedRef.current) return;
 
-  useEffect(() => {
-    const renderStart = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect отрисовки ЗАПУЩЕН`, {
-      nodes: displayGraphData?.nodes.length,
-      links: displayGraphData?.links.length
-    });
+    console.log(`[KnowledgeGraph] [${getTimeStamp()}] Инициализация SVG структуры`);
 
-    if (!svgRef.current || !displayGraphData || displayGraphData.nodes.length === 0) {
-      console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect: ранний выход`);
-      return;
-    }
-
+    const svg = d3.select(svgRef.current);
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
-    // Clear previous render
-    d3.select(svgRef.current).selectAll("*").remove();
+    svg.attr("viewBox", [0, 0, width, height]);
 
-    const svg = d3.select(svgRef.current)
-      .attr("viewBox", [0, 0, width, height]);
-
-    // Use the filtered graph data
-    const nodes = displayGraphData.nodes.map(d => ({ ...d }));
-    const links = displayGraphData.links.map(d => ({ ...d }));
-
-    // Add invisible background rect for panning (catches mouse events on empty space)
-    // Must be first so it's under everything but still receives events on empty space
-    const bgRect = svg.append("rect")
+    // Background rect для pan
+    svg.append("rect")
+      .attr("class", "bg-rect")
       .attr("width", width)
       .attr("height", height)
       .attr("fill", "transparent")
       .style("cursor", "move")
-      .style("pointer-events", "all");
+      .style("pointer-events", "all")
+      .on("dblclick", () => setFocusedNodeIds(new Set()));
 
-    // Двойной клик по пустому месту сбрасывает фокус
-    bgRect.on("dblclick", () => {
-      setFocusedNodeIds(new Set());
-    });
+    // Container для zoom transform
+    containerRef.current = svg.append("g").attr("class", "graph-container");
 
-    // Create container group for zoom/pan transforms
-    const container = svg.append("g");
-
-    // Define Arrowhead (outside container so it doesn't scale)
+    // Defs для стрелок
     svg.append("defs").append("marker")
       .attr("id", "arrowhead")
       .attr("viewBox", "0 -5 10 10")
       .attr("refX", 25)
       .attr("refY", 0)
-      .attr("markerWidth", 8)           // средний размер, как просил
+      .attr("markerWidth", 8)
       .attr("markerHeight", 8)
       .attr("orient", "auto")
       .append("path")
       .attr("d", "M0,-5L10,0L0,5")
       .attr("fill", "#475569");
 
-    const simulationStart = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Создание simulation`);
-
-    const simulation = d3.forceSimulation(nodes as any)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150))
-      .force("charge", d3.forceManyBody()
-        .strength(-400)
-        .theta(0.9)           // Barnes-Hut: O(n²) → O(n log n)
-        .distanceMax(300))    // игнорировать узлы дальше 300px
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide(40))
-      .alphaDecay(0.05)       // быстрее затухание (default 0.0228)
-      .alphaMin(0.001);       // раньше остановка
-
-    const simulationCreated = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] simulation создан за ${(simulationCreated - simulationStart).toFixed(1)}ms`);
-
-    // Draw lines inside container
-    const link = container.append("g")
+    // Группы для связей и узлов
+    containerRef.current.append("g").attr("class", "links-group")
       .attr("stroke", "#475569")
-      .attr("stroke-opacity", 0.6)
-      .selectAll("line")
-      .data(links)
-      .join("line")
-      .attr("stroke-width", 1.5)
-      .attr("marker-end", "url(#arrowhead)");
+      .attr("stroke-opacity", 0.6);
+    containerRef.current.append("g").attr("class", "link-labels-group");
+    containerRef.current.append("g").attr("class", "nodes-group");
 
-    // Draw link labels (use label or type from backend)
-    // Бэкенд теперь передаёт реальные типы связей: calls, reads_from, updates и т.д.
-    const getLinkLabel = (d: any) => d.label || d.type || '';
-    const linkLabels = container.append("g")
-      .selectAll("text")
-      .data(links.filter((d: any) => getLinkLabel(d).length > 0))
-      .join("text")
-      .attr("fill", "#94a3b8")
-      .attr("font-size", "11px")
-      .attr("text-anchor", "middle")
-      .attr("pointer-events", "none")
-      .style("pointer-events", "none")
-      .text((d: any) => getLinkLabel(d));
-
-    // Draw Nodes inside container
-    const node = container.append("g")
-      .selectAll("g")
-      .data(nodes)
-      .join("g")
-      .call(d3.drag<any, any>()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended)
-      )
-      .on("dblclick", (event: any, d: any) => {
-        event.stopPropagation();
-        addToClickHistory(d.id);
-        addToSessionHistory(d.id);
-        // Если кликнули по уже выбранному узлу - убираем его из фокуса
-        if (focusedNodeIds.has(d.id)) {
-          const newSet = new Set(focusedNodeIds);
-          newSet.delete(d.id);
-          setFocusedNodeIds(newSet);
-        } else {
-          // Двойной клик без Ctrl — заменяем фокус на один узел
-          setFocusedNodeIds(new Set([d.id]));
-        }
-      })
-      .on("click", (event: any, d: any) => {
-        addToClickHistory(d.id);
-        addToSessionHistory(d.id);
-        setLastTooltipHighlightedNodeId(null);
-
-        // Alt+клик — оставляем ТОЛЬКО этот узел и его связи (сброс остального фильтра)
-        if (event.altKey) {
-          event.stopPropagation();
-          const relatedNodes = findRelatedNodes(d.id);
-
-          setGraphSearch(''); // Сбрасываем поиск графа
-          setFilteredItemIds(relatedNodes); // В инспекторе и на графе — только эти
-          setFocusedNodeIds(new Set([d.id])); // В фокусе только он один
-          return;
-        }
-
-        // Ctrl+клик — добавляем все связанные узлы к фильтру (из полного графа, без учета текущего фильтра)
-        if (event.ctrlKey || event.metaKey) {
-          event.stopPropagation();
-
-          // Находим все связанные узлы из полного graphData
-          const relatedNodes = findRelatedNodes(d.id);
-
-          // Добавляем их к текущему фильтру
-          const newFilteredIds = new Set<string>(filteredItemIds);
-          for (const id of relatedNodes) {
-            newFilteredIds.add(id);
-          }
-
-          console.log(`[KnowledgeGraph] [${getTimeStamp()}] Обновляем фильтр: было ${filteredItemIds.size}, стало ${newFilteredIds.size}`);
-          setFilteredItemIds(newFilteredIds);
-
-          // Также добавляем к фокусу для подсветки
-          const newFocusSet = new Set(focusedNodeIds);
-          newFocusSet.add(d.id);
-          setFocusedNodeIds(newFocusSet);
-        }
-      });
-
-    // Node Shapes - используем разные формы для разных типов
-    // 5 уровней жёлтого: от яркого (последний клик) до бледного
-    const yellowShades = ['#fbbf24', '#fcd34d', '#fde68a', '#fef08a', '#fef3c7'];
-
-    // Функция для получения цвета по типу
-    const getNodeColor = (type: string) => {
-      switch (type) {
-        case AiItemType.FUNCTION: return "#3b82f6"; // blue
-        case AiItemType.CLASS: return "#10b981"; // emerald
-        case AiItemType.METHOD: return "#a855f7"; // purple
-        case AiItemType.MODULE: return "#14b8a6"; // teal
-        case AiItemType.STRUCT: return "#f59e0b"; // amber (go)
-        case AiItemType.INTERFACE: return "#ec4899"; // pink
-        case AiItemType.TABLE: return "#06b6d4"; // cyan
-        case AiItemType.TABLE_COLUMN: return "#6366f1"; // indigo
-        default: return "#64748b";
-      }
-    };
-
-    // Функция для получения цвета обводки
-    const getStrokeColor = (nodeId: string) => {
-      const historyIndex = clickHistory.indexOf(nodeId);
-      if (historyIndex !== -1) {
-        return yellowShades[historyIndex];
-      }
-      return "#1e293b";
-    };
-
-    // Функция для получения толщины обводки
-    const getStrokeWidth = (nodeId: string) => {
-      const historyIndex = clickHistory.indexOf(nodeId);
-      return historyIndex !== -1 ? 4 : 2;
-    };
-
-    // Создаём узлы с разными формами в зависимости от типа
-    node.each(function (d: any) {
-      const el = d3.select(this);
-      const fillColor = getNodeColor(d.type);
-      const strokeColor = getStrokeColor(d.id);
-      const strokeWidth = getStrokeWidth(d.id);
-
-      if (d.type === AiItemType.TABLE) {
-        // Таблицы - квадратики
-        const size = 40; // размер квадрата (диаметр круга был 40)
-        el.append("rect")
-          .attr("width", size)
-          .attr("height", size)
-          .attr("x", -size / 2)
-          .attr("y", -size / 2)
-          .attr("fill", fillColor)
-          .attr("stroke", strokeColor)
-          .attr("stroke-width", strokeWidth);
-      } else if (d.type === AiItemType.TABLE_COLUMN) {
-        // Колонки - прямоугольники (ширина как у узлов, высота 1/3)
-        const width = 40;
-        const height = width / 3; // примерно 13.33
-        el.append("rect")
-          .attr("width", width)
-          .attr("height", height)
-          .attr("x", -width / 2)
-          .attr("y", -height / 2)
-          .attr("fill", fillColor)
-          .attr("stroke", strokeColor)
-          .attr("stroke-width", strokeWidth);
-      } else {
-        // Остальные типы - круги
-        el.append("circle")
-          .attr("r", 20)
-          .attr("fill", fillColor)
-          .attr("stroke", strokeColor)
-          .attr("stroke-width", strokeWidth);
-      }
-    });
-
-    // Labels
-    node.append("text")
-      .text(d => d.id.split('.').pop() || d.id)
-      .attr("x", 25)
-      .attr("y", 5)
-      .attr("fill", "#cbd5e1")
-      .attr("font-size", "12px")
-      .style("pointer-events", "none")
-      .style("text-shadow", "2px 2px 4px #000");
-
-    // Persistent tooltip - показывается после удержания курсора неподвижно 1 сек, остаётся на экране до закрытия
-    node
-      .on("mouseenter", (event: any, d: any) => {
-        if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-
-        // Не запускаем таймер если зажата кнопка мыши (drag)
-        if (event.buttons > 0) return;
-
-        const nodeRef = { x: event.clientX, y: event.clientY };
-
-        const startTimer = (clientX: number, clientY: number) => {
-          return setTimeout(() => {
-            const svgRect = svgRef.current?.getBoundingClientRect();
-            if (svgRect) {
-              setTooltip({
-                node: { id: d.id, type: d.type, language: d.language, l2_desc: d.l2_desc },
-                x: clientX - svgRect.left + 20,
-                y: clientY - svgRect.top - 10
-              });
-              setLastTooltipHighlightedNodeId(d.id);
-            }
-          }, 1000);
-        };
-
-        tooltipTimeoutRef.current = startTimer(event.clientX, event.clientY);
-
-        d3.select(event.currentTarget).on("mousemove.tooltip", (moveEvent: any) => {
-          // Если зажата кнопка мыши — сбрасываем таймер и не перезапускаем
-          if (moveEvent.buttons > 0) {
-            if (tooltipTimeoutRef.current) {
-              clearTimeout(tooltipTimeoutRef.current);
-              tooltipTimeoutRef.current = null;
-            }
-            return;
-          }
-          const dx = moveEvent.clientX - nodeRef.x;
-          const dy = moveEvent.clientY - nodeRef.y;
-          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-            nodeRef.x = moveEvent.clientX;
-            nodeRef.y = moveEvent.clientY;
-            if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
-            tooltipTimeoutRef.current = startTimer(moveEvent.clientX, moveEvent.clientY);
-          }
-        });
-      })
-      .on("mouseleave", (event: any) => {
-        d3.select(event.currentTarget).on("mousemove.tooltip", null);
-        if (tooltipTimeoutRef.current) {
-          clearTimeout(tooltipTimeoutRef.current);
-          tooltipTimeoutRef.current = null;
-        }
-      });
-
-    // Rubber-band selection rect (рисуется поверх всего в SVG)
+    // Selection rect для rubber-band
     const selectionRect = svg.append("rect")
       .attr("class", "selection-rect")
       .attr("fill", "rgba(59, 130, 246, 0.15)")
@@ -1213,11 +1100,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .style("pointer-events", "none")
       .style("display", "none");
 
+    // Rubber-band selection handlers
     let isSelecting = false;
     let selStart: [number, number] = [0, 0];
 
-    bgRect
-      .on("mousedown.selection", function (event: MouseEvent) {
+    svg.select(".bg-rect")
+      .on("mousedown.selection", function(event: MouseEvent) {
         if (!event.shiftKey || event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
@@ -1230,7 +1118,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       });
 
     d3.select(document)
-      .on("mousemove.selection", function (event: MouseEvent) {
+      .on("mousemove.selection", function(event: MouseEvent) {
         if (!isSelecting) return;
         const cur = d3.pointer(event, svgRef.current!);
         const x = Math.min(selStart[0], cur[0]);
@@ -1239,7 +1127,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         const h = Math.abs(cur[1] - selStart[1]);
         selectionRect.attr("x", x).attr("y", y).attr("width", w).attr("height", h);
       })
-      .on("mouseup.selection", function (event: MouseEvent) {
+      .on("mouseup.selection", function(event: MouseEvent) {
         if (!isSelecting) return;
         isSelecting = false;
         selectionRect.style("display", "none");
@@ -1252,9 +1140,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
         if (x2 - x1 < 5 && y2 - y1 < 5) return;
 
-        const currentTransform = d3.zoomTransform(svg.node()!);
+        const currentTransform = zoomTransformRef.current;
         const selected = new Set<string>();
-        node.each(function (d: any) {
+        const nodesGroup = containerRef.current?.select(".nodes-group");
+        nodesGroup?.selectAll<SVGGElement, any>("g.node").each(function(d: any) {
           const sx = currentTransform.applyX(d.x);
           const sy = currentTransform.applyY(d.y);
           if (sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2) {
@@ -1279,24 +1168,26 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         }
       });
 
-    // Setup zoom and pan
+    // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .filter((event: any) => {
         if (event.type === 'wheel') return true;
         if (event.type === 'mousedown') {
           if (event.shiftKey) return false;
-          return event.button === 0 && event.target === bgRect.node();
+          return event.button === 0 && event.target.classList.contains('bg-rect');
         }
         return true;
       })
       .on("zoom", (event) => {
-        container.attr("transform", event.transform.toString());
+        zoomTransformRef.current = event.transform;
+        containerRef.current?.attr("transform", event.transform.toString());
       });
 
+    zoomBehaviorRef.current = zoom;
     svg.call(zoom);
 
-    // Handle wheel events for zoom (без CTRL, чувствительность увеличена в 1.5 раза)
+    // Wheel zoom handler
     svg.on("wheel.zoom", function (event: WheelEvent) {
       event.preventDefault();
       const point = d3.pointer(event, svgRef.current);
@@ -1307,120 +1198,215 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         .call(zoom.scaleBy as any, scale, point);
     } as any);
 
-    // Предварительный расчет позиций без DOM операций (прогрев)
-    const warmupStart = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Прогрев simulation (50 тиков)`);
-    simulation.tick(50);
-    const warmupEnd = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Прогрев завершён за ${(warmupEnd - warmupStart).toFixed(1)}ms`);
+    // Simulation (пустая)
+    simulationRef.current = d3.forceSimulation([])
+      .force("link", d3.forceLink([]).id((d: any) => d.id).distance(150))
+      .force("charge", d3.forceManyBody().strength(-400).theta(0.9).distanceMax(300))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collide", d3.forceCollide(40))
+      .alphaDecay(0.05)
+      .alphaMin(0.001)
+      .stop();
 
-    // Счётчики для логирования tick callback
-    let tickCount = 0;
-    let firstTickTime = performance.now();
-    let lastTickTime = firstTickTime;
-    let stabilizationLogged = false;
+    isInitializedRef.current = true;
+    console.log(`[KnowledgeGraph] [${getTimeStamp()}] SVG инициализирован`);
 
+    return () => {
+      console.log(`[KnowledgeGraph] [${getTimeStamp()}] Cleanup: остановка симуляции`);
+      simulationRef.current?.stop();
+      d3.select(document).on("mousemove.selection", null).on("mouseup.selection", null);
+    };
+  }, [isLoading]);
+
+  // === USEEFFECT ИНКРЕМЕНТАЛЬНОГО ОБНОВЛЕНИЯ ГРАФА ===
+  useEffect(() => {
+    if (!isInitializedRef.current || !containerRef.current || !simulationRef.current || !displayGraphData) {
+      return;
+    }
+
+    const updateStart = performance.now();
+    console.log(`[KnowledgeGraph] [${getTimeStamp()}] Инкрементальное обновление:`, {
+      nodes: displayGraphData.nodes.length,
+      links: displayGraphData.links.length
+    });
+
+    const simulation = simulationRef.current;
+    const container = containerRef.current;
+    const width = svgRef.current?.clientWidth || 800;
+    const height = svgRef.current?.clientHeight || 600;
+
+    // Подготовка узлов с сохранением позиций
+    const nodes: any[] = displayGraphData.nodes.map(d => {
+      const savedPos = nodePositionsRef.current.get(d.id);
+      return {
+        ...d,
+        x: savedPos?.x ?? width / 2 + (Math.random() - 0.5) * 200,
+        y: savedPos?.y ?? height / 2 + (Math.random() - 0.5) * 200
+      };
+    });
+
+    const links: any[] = displayGraphData.links.map(d => ({ ...d }));
+
+    // Обновление simulation
+    simulation.nodes(nodes);
+    (simulation.force("link") as d3.ForceLink<any, any>).links(links);
+
+    // === DATA JOIN для связей ===
+    const linksGroup = container.select<SVGGElement>(".links-group");
+    const linkSelection = linksGroup
+      .selectAll<SVGLineElement, any>("line")
+      .data(links, (d: any) => `${d.source?.id || d.source}-${d.target?.id || d.target}`);
+
+    linkSelection.exit().transition().duration(200).style("opacity", 0).remove();
+
+    const linkEnter = linkSelection.enter()
+      .append("line")
+      .attr("stroke-width", 1.5)
+      .attr("marker-end", "url(#arrowhead)")
+      .style("opacity", 0);
+
+    linkEnter.transition().duration(200).style("opacity", 1);
+
+    const linkUpdate = linkEnter.merge(linkSelection);
+
+    // === DATA JOIN для меток связей ===
+    const getLinkLabel = (d: any) => d.label || d.type || '';
+    const linkLabelsGroup = container.select<SVGGElement>(".link-labels-group");
+    const labelSelection = linkLabelsGroup
+      .selectAll<SVGTextElement, any>("text")
+      .data(links.filter((d: any) => getLinkLabel(d).length > 0), (d: any) => `${d.source?.id || d.source}-${d.target?.id || d.target}`);
+
+    labelSelection.exit().remove();
+
+    const labelEnter = labelSelection.enter()
+      .append("text")
+      .attr("fill", "#94a3b8")
+      .attr("font-size", "11px")
+      .attr("text-anchor", "middle")
+      .attr("pointer-events", "none")
+      .text((d: any) => getLinkLabel(d));
+
+    const labelUpdate = labelEnter.merge(labelSelection);
+
+    // === DATA JOIN для узлов ===
+    const nodesGroup = container.select<SVGGElement>(".nodes-group");
+    const nodeSelection = nodesGroup
+      .selectAll<SVGGElement, any>("g.node")
+      .data(nodes, (d: any) => d.id);
+
+    // EXIT: удаляем уходящие узлы
+    nodeSelection.exit()
+      .transition().duration(200)
+      .style("opacity", 0)
+      .remove()
+      .on("end", function() {
+        const d = d3.select(this).datum() as any;
+        if (d?.id) nodePositionsRef.current.delete(d.id);
+      });
+
+    // ENTER: добавляем новые узлы
+    const nodeEnter = nodeSelection.enter()
+      .append("g")
+      .attr("class", "node")
+      .style("opacity", 0)
+      .style("cursor", "pointer")
+      .call(d3.drag<any, any>()
+        .on("start", function(event: any, d: any) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current);
+            tooltipTimeoutRef.current = null;
+          }
+          const pointer = d3.pointer(event, container.node());
+          d.fx = pointer[0];
+          d.fy = pointer[1];
+          event.sourceEvent.stopPropagation();
+        })
+        .on("drag", function(event: any, d: any) {
+          const pointer = d3.pointer(event, container.node());
+          d.fx = pointer[0];
+          d.fy = pointer[1];
+        })
+        .on("end", function(event: any, d: any) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        })
+      )
+      .on("click", handleNodeClick)
+      .on("dblclick", handleNodeDblClick)
+      .on("mouseenter", handleNodeMouseEnter)
+      .on("mouseleave", handleNodeMouseLeave);
+
+    // Создание форм для новых узлов
+    nodeEnter.each(function(d: any) {
+      createNodeShape(d3.select(this) as any, d, clickHistory);
+    });
+
+    nodeEnter.transition().duration(200).style("opacity", 1);
+
+    // UPDATE + ENTER
+    const nodeUpdate = nodeEnter.merge(nodeSelection);
+
+    // Tick callback
     simulation.on("tick", () => {
-      tickCount++;
-      const tickStart = performance.now();
-      const alpha = simulation.alpha();
-      const timeSinceLastTick = tickStart - lastTickTime;
-
-      // Логируем первый тик
-      if (tickCount === 1) {
-        console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Первый tick callback, alpha=${alpha.toFixed(4)}`);
-        firstTickTime = tickStart;
-        lastTickTime = tickStart;
-      }
-
-      // Логируем большие интервалы между тиками (>50ms) - это может быть блокировка браузера
-      if (tickCount > 1 && timeSinceLastTick > 50) {
-        console.warn(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Большой интервал между тиками #${tickCount - 1} и #${tickCount}: ${timeSinceLastTick.toFixed(1)}ms`);
-      }
-
-      // Логируем первые 10 тиков для диагностики
-      if (tickCount <= 10) {
-        const timeSinceFirst = tickStart - firstTickTime;
-        console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Tick #${tickCount}, alpha=${alpha.toFixed(4)}, время с первого: ${timeSinceFirst.toFixed(1)}ms, интервал: ${timeSinceLastTick.toFixed(1)}ms`);
-      }
-      // Логируем каждые 10 тиков
-      else if (tickCount % 10 === 0) {
-        const timeSinceFirst = tickStart - firstTickTime;
-        console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Tick #${tickCount}, alpha=${alpha.toFixed(4)}, время с первого: ${timeSinceFirst.toFixed(1)}ms, интервал: ${timeSinceLastTick.toFixed(1)}ms`);
-      }
-
-      // Логируем стабилизацию только один раз
-      if (!stabilizationLogged && alpha <= 0.001) {
-        const totalTickTime = tickStart - firstTickTime;
-        console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Симуляция стабилизирована после ${tickCount} тиков (alpha=${alpha.toFixed(4)}), общее время тиков: ${totalTickTime.toFixed(1)}ms`);
-        stabilizationLogged = true;
-      }
-
-      lastTickTime = tickStart;
-
-      link
+      linkUpdate
         .attr("x1", (d: any) => d.source.x)
         .attr("y1", (d: any) => d.source.y)
         .attr("x2", (d: any) => d.target.x)
         .attr("y2", (d: any) => d.target.y);
 
-      // Update link labels position (middle of the link)
-      linkLabels
+      labelUpdate
         .attr("x", (d: any) => (d.source.x + d.target.x) / 2)
-        .attr("y", (d: any) => (d.source.y + d.target.y) / 2);
+        .attr("y", (d: any) => (d.source.y + d.target.y) / 2 - 5);
 
-      node
-        .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+      nodeUpdate.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
 
-      const tickEnd = performance.now();
-      // Логируем медленные тики (>5ms)
-      if (tickEnd - tickStart > 5) {
-        console.warn(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Медленный tick #${tickCount}: ${(tickEnd - tickStart).toFixed(1)}ms`);
-      }
+      // Сохраняем позиции в ref
+      nodes.forEach(n => {
+        if (n.x !== undefined && n.y !== undefined) {
+          nodePositionsRef.current.set(n.id, { x: n.x, y: n.y });
+        }
+      });
     });
 
-    function dragstarted(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
+    // Перезапуск симуляции с небольшим alpha
+    simulation.alpha(0.3).restart();
 
-      // Сбрасываем таймер тултипа — при drag тултип не нужен
-      if (tooltipTimeoutRef.current) {
-        clearTimeout(tooltipTimeoutRef.current);
-        tooltipTimeoutRef.current = null;
+    console.log(`[KnowledgeGraph] [${getTimeStamp()}] Обновление завершено за ${(performance.now() - updateStart).toFixed(1)}ms`);
+
+  }, [displayGraphData, handleNodeClick, handleNodeDblClick, handleNodeMouseEnter, handleNodeMouseLeave, createNodeShape, clickHistory]);
+
+  // === USEEFFECT ОБНОВЛЕНИЯ ОБВОДКИ УЗЛОВ ===
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const nodesGroup = containerRef.current.select(".nodes-group");
+    nodesGroup.selectAll<SVGGElement, any>("g.node").each(function(d) {
+      const shape = d3.select(this).select("rect, circle");
+      if (shape.empty()) return;
+
+      const isTooltipNode = greenHighlightNodeId === d.id;
+      const isMultiSelected = multiSelectedNodeIds.has(d.id);
+
+      let strokeColor: string;
+      let strokeWidth: number;
+
+      if (isTooltipNode) {
+        strokeColor = TOOLTIP_STROKE;
+        strokeWidth = 4;
+      } else if (isMultiSelected) {
+        strokeColor = MULTI_SELECT_STROKE;
+        strokeWidth = 4;
+      } else {
+        const historyIndex = clickHistory.indexOf(d.id);
+        strokeColor = historyIndex !== -1 ? YELLOW_SHADES[historyIndex] : DEFAULT_STROKE;
+        strokeWidth = historyIndex !== -1 ? 4 : 2;
       }
 
-      // Convert screen coordinates to graph coordinates considering zoom/pan
-      const pointer = d3.pointer(event, container.node());
-      d.fx = pointer[0];
-      d.fy = pointer[1];
-
-      // Prevent pan when dragging node
-      event.sourceEvent.stopPropagation();
-    }
-
-    function dragged(event: any, d: any) {
-      // Convert screen coordinates to graph coordinates considering zoom/pan
-      const pointer = d3.pointer(event, container.node());
-      d.fx = pointer[0];
-      d.fy = pointer[1];
-    }
-
-    function dragended(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    }
-
-    // Логирование завершения отрисовки (только создание, не работа симуляции)
-    const renderEnd = performance.now();
-    console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] useEffect отрисовки завершён за ${(renderEnd - renderStart).toFixed(1)}ms (создание симуляции, тики выполняются асинхронно)`);
-
-    // Cleanup: остановить симуляцию и убрать document listeners при размонтировании или смене данных
-    return () => {
-      console.log(`[KnowledgeGraph] [${getTimeStamp()}] [${getAbsoluteTime()}] Cleanup: остановка симуляции`);
-      simulation.stop();
-      d3.select(document).on("mousemove.selection", null).on("mouseup.selection", null);
-    };
-  }, [displayGraphData, clickHistory]);
+      shape.attr("stroke", strokeColor).attr("stroke-width", strokeWidth);
+    });
+  }, [greenHighlightNodeId, clickHistory, multiSelectedNodeIds]);
 
   if (isLoading) {
     return (

@@ -381,6 +381,14 @@ export class ApiClient {
     });
   }
 
+  // POST /api/ask - Прямой запрос к LLM (без RAG)
+  async ask(request: import('../types').AskRequest): Promise<import('../types').AskResponse> {
+    return this.request<import('../types').AskResponse>('/api/ask', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
   // Health check method
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     return this.request('/api/health');

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppConfig } from '../../types';
+import { apiClient } from '../../services/apiClient';
 
 interface AppConfigTabProps {
   config: AppConfig | null;
@@ -21,6 +22,10 @@ export const AppConfigTab: React.FC<AppConfigTabProps> = ({
   const [formData, setFormData] = useState<Partial<AppConfig>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // Model test state
+  const [testingModel, setTestingModel] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; response: string } | null>(null);
 
   useEffect(() => {
     if (config) {
@@ -53,6 +58,40 @@ export const AppConfigTab: React.FC<AppConfigTabProps> = ({
     setSaving(false);
     if (success) {
       setHasChanges(false);
+    }
+  };
+
+  // Test model connection
+  const handleTestModel = async (modelType: 'default' | 'logic') => {
+    const model = modelType === 'default' 
+      ? (formData.KOSMOS_MODEL || config?.KOSMOS_MODEL)
+      : (formData.KOSMOS_LOGIC_ARHITECT_MODEL || config?.KOSMOS_LOGIC_ARHITECT_MODEL);
+    
+    if (!model) {
+      setTestResult({ success: false, response: 'Model not specified' });
+      return;
+    }
+
+    setTestingModel(true);
+    setTestResult(null);
+    
+    try {
+      const response = await apiClient.ask({
+        message: 'Привет! Это тестовое сообщение для проверки подключения. Ответь кратко.',
+        model: model
+      });
+      
+      setTestResult({ 
+        success: true, 
+        response: response.response 
+      });
+    } catch (error: any) {
+      setTestResult({ 
+        success: false, 
+        response: error.message || 'Failed to connect to model' 
+      });
+    } finally {
+      setTestingModel(false);
     }
   };
 
@@ -89,13 +128,57 @@ export const AppConfigTab: React.FC<AppConfigTabProps> = ({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">Default Model <span className="text-red-400">*</span></label>
-            <input type="text" value={formData.KOSMOS_MODEL || ''} onChange={(e) => handleInputChange('KOSMOS_MODEL', e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-sm px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="FAST" required />
+            <div className="flex gap-2">
+              <input type="text" value={formData.KOSMOS_MODEL || ''} onChange={(e) => handleInputChange('KOSMOS_MODEL', e.target.value)} className="flex-1 bg-slate-900 border border-slate-600 text-slate-200 text-sm px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="FAST" required />
+              <button
+                type="button"
+                onClick={() => handleTestModel('default')}
+                disabled={testingModel || loading}
+                className="px-2 py-1 text-xs font-medium rounded transition-colors bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title="Test model connection"
+              >
+                {testingModel ? '...' : '🧪'}
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">Logic Architect Model</label>
-            <input type="text" value={formData.KOSMOS_LOGIC_ARHITECT_MODEL || ''} onChange={(e) => handleInputChange('KOSMOS_LOGIC_ARHITECT_MODEL', e.target.value || null)} className="w-full bg-slate-900 border border-slate-600 text-slate-200 text-sm px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="INSTRUCT" />
+            <div className="flex gap-2">
+              <input type="text" value={formData.KOSMOS_LOGIC_ARHITECT_MODEL || ''} onChange={(e) => handleInputChange('KOSMOS_LOGIC_ARHITECT_MODEL', e.target.value || null)} className="flex-1 bg-slate-900 border border-slate-600 text-slate-200 text-sm px-2.5 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="INSTRUCT" />
+              <button
+                type="button"
+                onClick={() => handleTestModel('logic')}
+                disabled={testingModel || loading}
+                className="px-2 py-1 text-xs font-medium rounded transition-colors bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title="Test model connection"
+              >
+                {testingModel ? '...' : '🧪'}
+              </button>
+            </div>
           </div>
         </div>
+        
+        {/* Test Result */}
+        {testResult && (
+          <div className={`mt-2 p-2 rounded text-xs ${
+            testResult.success 
+              ? 'bg-emerald-900/20 border border-emerald-700/30 text-emerald-300'
+              : 'bg-red-900/20 border border-red-700/30 text-red-300'
+          }`}>
+            <div className="font-medium mb-1">
+              {testResult.success ? '✅ Model Response:' : '❌ Error:'}
+            </div>
+            <div className="whitespace-pre-wrap break-words max-h-24 overflow-y-auto">
+              {testResult.response}
+            </div>
+            <button 
+              onClick={() => setTestResult(null)}
+              className="mt-1 text-slate-400 hover:text-white"
+            >
+              ✕ Close
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2.5">

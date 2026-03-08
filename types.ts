@@ -746,3 +746,16 @@ export interface ItemTypeUpdateRequest {
   name?: string;
   description?: string | null;
 }
+
+// ────────────────────────────────────── Ask API Types (Model Test)
+
+export interface AskRequest {
+  message: string;
+  systemPrompt?: string | null;
+  model?: string | null;
+}
+
+export interface AskResponse {
+  response: string;
+  timestamp: string;
+}

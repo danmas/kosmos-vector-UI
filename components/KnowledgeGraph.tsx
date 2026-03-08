@@ -1617,14 +1617,20 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               {/* Кнопки в правом верхнем углу (вертикально) */}
               <div className="absolute top-1 right-1 flex flex-col items-center gap-0.5">
                 <button
-                  onClick={() => setTooltip(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLastTooltipHighlightedNodeId(tooltip.node.id);
+                    setTooltip(null);
+                  }}
                   className="text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
                   title="Закрыть"
                 >
                   ✕
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLastTooltipHighlightedNodeId(tooltip.node.id);
                     openNodeModal(tooltip.node.id);
                     setTooltip(null);
                   }}
@@ -1662,14 +1668,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               <div className="mt-3 space-y-2 border-t border-slate-700 pt-2 shrink-0">
                 <div className="flex gap-2">
                   <button
-                    onClick={() => addIncomingNodes(tooltip.node.id)}
+                    onClick={(e) => { e.stopPropagation(); addIncomingNodes(tooltip.node.id); }}
                     className="flex-1 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow text-center font-bold"
                     title="Добавить на экран всех, кто вызывает (использует) этот узел"
                   >
                     ← Callers
                   </button>
                   <button
-                    onClick={() => addOutgoingNodes(tooltip.node.id)}
+                    onClick={(e) => { e.stopPropagation(); addOutgoingNodes(tooltip.node.id); }}
                     className="flex-1 text-[10px] bg-teal-600 hover:bg-teal-500 text-white px-2 py-1 rounded shadow text-center font-bold"
                     title="Добавить на экран всех, кого вызывает данный узел"
                   >
@@ -1678,14 +1684,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => removeIncomingNodes(tooltip.node.id)}
+                    onClick={(e) => { e.stopPropagation(); removeIncomingNodes(tooltip.node.id); }}
                     className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
                     title="Убрать с экрана текущих вызывающих этого узла"
                   >
                     x Callers
                   </button>
                   <button
-                    onClick={() => removeOutgoingNodes(tooltip.node.id)}
+                    onClick={(e) => { e.stopPropagation(); removeOutgoingNodes(tooltip.node.id); }}
                     className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
                     title="Убрать с экрана текущие узлы, которые вызываются этим узлом"
                   >
@@ -1693,7 +1699,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                   </button>
                 </div>
                 <button
-                  onClick={() => removeNodeFromGraph(tooltip.node.id)}
+                  onClick={(e) => { e.stopPropagation(); removeNodeFromGraph(tooltip.node.id); }}
                   className="w-full text-[10px] bg-red-900/50 hover:bg-red-800/60 text-red-200 border border-red-700/50 px-2 py-1 rounded shadow text-center font-bold"
                   title="Убрать этот узел с графа"
                 >
@@ -1712,7 +1718,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             >
               <div className="absolute top-1 right-1">
                 <button
-                  onClick={() => { setMultiSelectTooltip(null); setMultiSelectedNodeIds(new Set()); }}
+                  onClick={(e) => { e.stopPropagation(); setMultiSelectTooltip(null); setMultiSelectedNodeIds(new Set()); }}
                   className="text-slate-400 hover:text-white text-sm px-1.5 py-0.5 rounded hover:bg-slate-700"
                   title="Закрыть"
                 >
@@ -1732,14 +1738,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
               <div className="mt-3 space-y-2 border-t border-slate-700 pt-2 shrink-0">
                 <div className="flex gap-2">
                   <button
-                    onClick={() => addIncomingNodesMulti(multiSelectedNodeIds)}
+                    onClick={(e) => { e.stopPropagation(); addIncomingNodesMulti(multiSelectedNodeIds); }}
                     className="flex-1 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded shadow text-center font-bold"
                     title="Добавить на экран всех, кто вызывает выделенные узлы"
                   >
                     ← Callers
                   </button>
                   <button
-                    onClick={() => addOutgoingNodesMulti(multiSelectedNodeIds)}
+                    onClick={(e) => { e.stopPropagation(); addOutgoingNodesMulti(multiSelectedNodeIds); }}
                     className="flex-1 text-[10px] bg-teal-600 hover:bg-teal-500 text-white px-2 py-1 rounded shadow text-center font-bold"
                     title="Добавить на экран всех, кого вызывают выделенные узлы"
                   >
@@ -1748,14 +1754,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => removeIncomingNodesMulti(multiSelectedNodeIds)}
+                    onClick={(e) => { e.stopPropagation(); removeIncomingNodesMulti(multiSelectedNodeIds); }}
                     className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
                     title="Убрать с экрана вызывающих для выделенных узлов"
                   >
                     x Callers
                   </button>
                   <button
-                    onClick={() => removeOutgoingNodesMulti(multiSelectedNodeIds)}
+                    onClick={(e) => { e.stopPropagation(); removeOutgoingNodesMulti(multiSelectedNodeIds); }}
                     className="flex-1 text-[10px] bg-slate-700 hover:bg-red-900/40 text-slate-300 hover:text-red-200 border border-slate-600 px-2 py-1 rounded shadow text-center"
                     title="Убрать с экрана вызываемых для выделенных узлов"
                   >
@@ -1763,7 +1769,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                   </button>
                 </div>
                 <button
-                  onClick={() => removeNodesFromGraphMulti(multiSelectedNodeIds)}
+                  onClick={(e) => { e.stopPropagation(); removeNodesFromGraphMulti(multiSelectedNodeIds); }}
                   className="w-full text-[10px] bg-red-900/50 hover:bg-red-800/60 text-red-200 border border-red-700/50 px-2 py-1 rounded shadow text-center font-bold"
                   title="Убрать выделенные узлы с графа"
                 >

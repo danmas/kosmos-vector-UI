@@ -80,8 +80,9 @@ export class ProjectTreeLayout implements LayoutEngine {
 
     const { groupBy = 'file', collapsedNodes } = config;
 
-    // Синхронизируем collapsed state из конфига
-    if (collapsedNodes) {
+    // Синхронизуем collapsed state из конфига ТОЛЬКО если явно передан
+    // (чтобы не сбрасывать внутреннее состояние при внутренней перерисовке от toggleCollapse)
+    if (collapsedNodes && collapsedNodes.size > 0) {
       this.collapsedNodes = new Set(collapsedNodes);
     }
 

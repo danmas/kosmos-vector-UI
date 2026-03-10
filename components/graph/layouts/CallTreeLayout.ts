@@ -150,10 +150,28 @@ export class CallTreeLayout implements LayoutEngine {
     });
 
     // Рисуем связи
+    this.currentTreeLinks = treeLinks;
+    this.isHorizontalLayout = isHorizontal;
     this.renderLinks(treeLinks, isHorizontal);
 
     // Рисуем узлы (с историей кликов для выделения)
     this.renderNodes(treeNodes, callbacks, config.clickHistory || []);
+  }
+
+  /** Сохранённые связи для обновления при drag */
+  private currentTreeLinks: d3.HierarchyPointLink<HierarchyNodeData>[] = [];
+  private isHorizontalLayout: boolean = false;
+
+  /** Обновление позиций связей при drag */
+  private updateLinksPositions(): void {
+    if (!this.linksGroup) return;
+    
+    this.linksGroup.selectAll<SVGPathElement, d3.HierarchyPointLink<HierarchyNodeData>>('path')
+      .attr('d', d => {
+        const source = { x: d.source.x!, y: d.source.y! };
+        const target = { x: d.target.x!, y: d.target.y! };
+        return createCurvedLinkPath(source, target, this.isHorizontalLayout ? 'horizontal' : 'vertical');
+      });
   }
 
   /** Отрисовка связей */
@@ -285,6 +303,28 @@ export class CallTreeLayout implements LayoutEngine {
         .style('pointer-events', 'none')
         .style('text-shadow', '1px 1px 2px #000');
     });
+
+    // Drag behavior для перетаскивания узлов
+    const self = this;
+    const dragBehavior = d3.drag<SVGGElement, d3.HierarchyPointNode<HierarchyNodeData>>()
+      .on('start', function(event) {
+        event.sourceEvent.stopPropagation();
+        d3.select(this).raise().classed('dragging', true);
+      })
+      .on('drag', function(event, d) {
+        // Обновляем позицию узла
+        d.x = event.x;
+        d.y = event.y;
+        d3.select(this).attr('transform', `translate(${d.x},${d.y})`);
+        
+        // Обновляем связи в реальном времени
+        self.updateLinksPositions();
+      })
+      .on('end', function() {
+        d3.select(this).classed('dragging', false);
+      });
+
+    nodeEnter.call(dragBehavior);
 
     // Привязываем события
     nodeEnter

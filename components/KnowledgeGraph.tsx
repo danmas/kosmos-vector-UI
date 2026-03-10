@@ -1100,11 +1100,17 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     [displayGraphData]
   );
 
+  // Config с историей кликов для выделения
+  const layoutConfigWithHistory = useMemo(() => ({
+    ...layoutConfig,
+    clickHistory
+  }), [layoutConfig, clickHistory]);
+
   const { forceUpdate: forceTreeUpdate } = useGraphLayout({
     svgRef,
     containerRef: containerRef as any,
     mode: layoutMode,
-    config: layoutConfig,
+    config: layoutConfigWithHistory,
     nodes: treeLayoutNodes,
     links: treeLayoutLinks,
     callbacks: layoutCallbacks,

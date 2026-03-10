@@ -33,6 +33,10 @@ export interface LayoutConfig {
   groupBy?: ProjectTreeGroupBy;
   /** Показывать свёрнутые узлы */
   collapsedNodes?: Set<string>;
+  
+  // === Общие ===
+  /** История кликов для выделения узлов */
+  clickHistory?: string[];
 }
 
 /** Узел графа (расширенный для layout'ов) */

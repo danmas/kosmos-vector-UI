@@ -152,8 +152,8 @@ export class CallTreeLayout implements LayoutEngine {
     // Рисуем связи
     this.renderLinks(treeLinks, isHorizontal);
 
-    // Рисуем узлы
-    this.renderNodes(treeNodes, callbacks);
+    // Рисуем узлы (с историей кликов для выделения)
+    this.renderNodes(treeNodes, callbacks, config.clickHistory || []);
   }
 
   /** Отрисовка связей */
@@ -198,7 +198,8 @@ export class CallTreeLayout implements LayoutEngine {
   /** Отрисовка узлов */
   private renderNodes(
     nodes: d3.HierarchyPointNode<HierarchyNodeData>[],
-    callbacks: LayoutCallbacks
+    callbacks: LayoutCallbacks,
+    clickHistory: string[] = []
   ): void {
     if (!this.nodesGroup) return;
 
@@ -220,13 +221,18 @@ export class CallTreeLayout implements LayoutEngine {
       .style('cursor', 'pointer')
       .style('opacity', 0);
 
-    // Добавляем форму узла
+    // Добавляем форму узла (как в Force layout)
     nodeEnter.each(function(d) {
       const el = d3.select(this);
       const nodeData = d.data;
       const fillColor = getNodeColor(nodeData.type);
+      
+      // Выделение по истории кликов
+      const historyIndex = clickHistory.indexOf(nodeData.id);
+      const strokeColor = historyIndex !== -1 ? YELLOW_SHADES[historyIndex] : DEFAULT_STROKE;
+      const strokeWidth = historyIndex !== -1 ? 4 : NODE_SIZES.STROKE_WIDTH_DEFAULT;
 
-      // Для виртуальных узлов (если они есть)
+      // Для виртуальных узлов
       if (nodeData.isVirtual) {
         el.append('rect')
           .attr('width', 16)
@@ -235,21 +241,44 @@ export class CallTreeLayout implements LayoutEngine {
           .attr('y', -8)
           .attr('rx', 3)
           .attr('fill', '#64748b')
-          .attr('stroke', DEFAULT_STROKE)
-          .attr('stroke-width', 1);
-      } else {
-        // Реальные узлы
-        el.append('circle')
-          .attr('r', NODE_SIZES.CIRCLE_RADIUS * 0.8) // Чуть меньше для дерева
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth);
+      } else if (nodeData.type === 'table') {
+        // TABLE = квадрат
+        const size = 32;
+        el.append('rect')
+          .attr('width', size)
+          .attr('height', size)
+          .attr('x', -size / 2)
+          .attr('y', -size / 2)
           .attr('fill', fillColor)
-          .attr('stroke', DEFAULT_STROKE)
-          .attr('stroke-width', NODE_SIZES.STROKE_WIDTH_DEFAULT);
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth);
+      } else if (nodeData.type === 'table_column') {
+        // TABLE_COLUMN = прямоугольник
+        const width = 32;
+        const height = width / 3;
+        el.append('rect')
+          .attr('width', width)
+          .attr('height', height)
+          .attr('x', -width / 2)
+          .attr('y', -height / 2)
+          .attr('fill', fillColor)
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth);
+      } else {
+        // Остальные = круг
+        el.append('circle')
+          .attr('r', NODE_SIZES.CIRCLE_RADIUS * 0.8)
+          .attr('fill', fillColor)
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth);
       }
 
       // Метка
       el.append('text')
         .text(nodeData.name)
-        .attr('x', 20)
+        .attr('x', 22)
         .attr('y', 4)
         .attr('fill', '#cbd5e1')
         .attr('font-size', '11px')

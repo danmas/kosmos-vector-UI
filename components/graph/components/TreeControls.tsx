@@ -53,6 +53,14 @@ const CLUSTER_BY_OPTIONS: { value: ClusterGroupBy; label: string; icon: string }
   { value: 'tags', label: 'Tags', icon: '🏷️' },
 ];
 
+/** Опции направления для Layered */
+const LAYERED_DIRECTION_OPTIONS: { value: 'TB' | 'BT' | 'LR' | 'RL'; label: string; icon: string }[] = [
+  { value: 'TB', label: 'Top-Down', icon: '↓' },
+  { value: 'BT', label: 'Bottom-Up', icon: '↑' },
+  { value: 'LR', label: 'Left-Right', icon: '→' },
+  { value: 'RL', label: 'Right-Left', icon: '←' },
+];
+
 export const TreeControls: React.FC<TreeControlsProps> = ({
   mode,
   config,
@@ -259,6 +267,36 @@ export const TreeControls: React.FC<TreeControlsProps> = ({
           >
             {config.showClusterHulls !== false ? '🛶 Hulls ON' : '⚫ Hulls OFF'}
           </button>
+        </>
+      )}
+
+      {/* === Layered Controls === */}
+      {mode === 'layered' && (
+        <>
+          {/* Направление слоёв */}
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-slate-500 uppercase">Direction:</span>
+            <div className="flex gap-0.5">
+              {LAYERED_DIRECTION_OPTIONS.map(({ value, label, icon }) => (
+                <button
+                  key={value}
+                  onClick={() => onChange({ layeredDirection: value })}
+                  disabled={disabled}
+                  title={label}
+                  className={`
+                    px-1.5 py-0.5 rounded text-[10px] font-medium
+                    ${config.layeredDirection === value
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600'
+                    }
+                    disabled:opacity-50
+                  `}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </div>
         </>
       )}
     </div>

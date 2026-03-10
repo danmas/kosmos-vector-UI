@@ -1,12 +1,12 @@
 /**
  * Типы для модуля визуализации графа
- * Поддержка нескольких режимов отображения: Force, Call Tree, Project Tree, Clustered
+ * Поддержка нескольких режимов отображения: Force, Call Tree, Project Tree, Clustered, Layered
  */
 
 import * as d3 from 'd3';
 
 /** Режимы отображения графа */
-export type GraphLayoutMode = 'force' | 'call-tree' | 'project-tree' | 'clustered';
+export type GraphLayoutMode = 'force' | 'call-tree' | 'project-tree' | 'clustered' | 'layered';
 
 /** Направление отрисовки дерева */
 export type TreeDirection = 'top-down' | 'bottom-up' | 'left-right' | 'right-left';
@@ -42,6 +42,14 @@ export interface LayoutConfig {
   clusterBy?: ClusterGroupBy;
   /** Показывать границы кластеров */
   showClusterHulls?: boolean;
+  
+  // === Для layered ===
+  /** Направление слоёв */
+  layeredDirection?: 'TB' | 'BT' | 'LR' | 'RL';
+  /** Расстояние между слоями */
+  layerSpacing?: number;
+  /** Расстояние между узлами в слое */
+  nodeSpacing?: number;
   
   // === Общие ===
   /** История кликов для выделения узлов */
@@ -139,5 +147,8 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   groupBy: 'file',
   collapsedNodes: new Set(),
   clusterBy: 'type',
-  showClusterHulls: true
+  showClusterHulls: true,
+  layeredDirection: 'TB',
+  layerSpacing: 100,
+  nodeSpacing: 50
 };

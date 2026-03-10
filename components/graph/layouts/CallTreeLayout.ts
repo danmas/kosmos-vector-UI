@@ -162,16 +162,24 @@ export class CallTreeLayout implements LayoutEngine {
   private currentTreeLinks: d3.HierarchyPointLink<HierarchyNodeData>[] = [];
   private isHorizontalLayout: boolean = false;
 
-  /** Обновление позиций связей при drag */
+  /** Обновление позиций связей и меток при drag */
   private updateLinksPositions(): void {
     if (!this.linksGroup) return;
     
+    // Обновляем линии связей
     this.linksGroup.selectAll<SVGPathElement, d3.HierarchyPointLink<HierarchyNodeData>>('path')
       .attr('d', d => {
         const source = { x: d.source.x!, y: d.source.y! };
         const target = { x: d.target.x!, y: d.target.y! };
         return createCurvedLinkPath(source, target, this.isHorizontalLayout ? 'horizontal' : 'vertical');
       });
+    
+    // Обновляем метки типов связей
+    if (this.labelsGroup) {
+      this.labelsGroup.selectAll<SVGTextElement, d3.HierarchyPointLink<HierarchyNodeData>>('text.link-label')
+        .attr('x', d => (d.source.x! + d.target.x!) / 2)
+        .attr('y', d => (d.source.y! + d.target.y!) / 2 - 5);
+    }
   }
 
   /** Отрисовка связей */
@@ -211,6 +219,43 @@ export class CallTreeLayout implements LayoutEngine {
         const target = { x: d.target.x!, y: d.target.y! };
         return createCurvedLinkPath(source, target, isHorizontal ? 'horizontal' : 'vertical');
       });
+
+    // Метки типов связей
+    this.renderLinkLabels(links);
+  }
+
+  /** Отрисовка меток типов связей */
+  private renderLinkLabels(links: d3.HierarchyPointLink<HierarchyNodeData>[]): void {
+    if (!this.labelsGroup) return;
+
+    // Фильтруем связи с типом (target.data.linkType хранит тип связи от родителя)
+    const linksWithLabels = links.filter(d => d.target.data.linkType);
+
+    const labelSelection = this.labelsGroup
+      .selectAll<SVGTextElement, d3.HierarchyPointLink<HierarchyNodeData>>('text.link-label')
+      .data(linksWithLabels, d => `${d.source.data.id}-${d.target.data.id}`);
+
+    // EXIT
+    labelSelection.exit().remove();
+
+    // ENTER
+    const labelEnter = labelSelection.enter()
+      .append('text')
+      .attr('class', 'link-label')
+      .attr('fill', '#94a3b8')
+      .attr('font-size', '10px')
+      .attr('text-anchor', 'middle')
+      .attr('pointer-events', 'none')
+      .style('opacity', 0);
+
+    // UPDATE + ENTER
+    labelEnter.merge(labelSelection)
+      .text(d => d.target.data.linkType || '')
+      .transition()
+      .duration(300)
+      .style('opacity', 1)
+      .attr('x', d => (d.source.x! + d.target.x!) / 2)
+      .attr('y', d => (d.source.y! + d.target.y!) / 2 - 5);
   }
 
   /** Отрисовка узлов */

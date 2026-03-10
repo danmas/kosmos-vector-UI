@@ -81,6 +81,7 @@ export interface HierarchyNodeData {
   filePath?: string;
   l2_desc?: string;
   isVirtual?: boolean; // Для промежуточных узлов (папки, пакеты)
+  linkType?: string; // Тип связи от родителя (calls, imports, etc.)
   children?: HierarchyNodeData[];
 }
 

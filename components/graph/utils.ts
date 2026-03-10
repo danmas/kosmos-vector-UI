@@ -320,7 +320,7 @@ export const buildCallHierarchy = (
 
   const visited = new Set<string>();
 
-  const buildRecursive = (nodeId: string, depth: number): HierarchyNodeData | null => {
+  const buildRecursive = (nodeId: string, depth: number, parentLinkType?: string): HierarchyNodeData | null => {
     if (depth > maxDepth || visited.has(nodeId)) {
       return null;
     }
@@ -356,7 +356,7 @@ export const buildCallHierarchy = (
       }
 
       if (childId && !visited.has(childId)) {
-        const childHierarchy = buildRecursive(childId, depth + 1);
+        const childHierarchy = buildRecursive(childId, depth + 1, linkType);
         if (childHierarchy) {
           children.push(childHierarchy);
         }
@@ -371,6 +371,7 @@ export const buildCallHierarchy = (
       filePath: node.filePath,
       l2_desc: node.l2_desc,
       isVirtual: false,
+      linkType: parentLinkType, // Тип связи от родителя
       children: children.length > 0 ? children : undefined,
     };
   };

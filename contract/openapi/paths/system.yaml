@@ -102,6 +102,41 @@
                     type: string
                   message:
                     type: string
+  delete:
+    tags:
+      - System
+    summary: Очистить серверные логи
+    operationId: clearLogs
+    parameters:
+      - name: context-code
+        in: query
+        required: true
+        description: Контекстный код для изоляции данных (произвольная строка)
+        schema:
+          type: string
+          example: CARL
+    responses:
+      '200':
+        description: Логи успешно очищены
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                message:
+                  type: string
+                  example: "Logs cleared successfully"
+                deletedCount:
+                  type: integer
+                  description: Количество удалённых записей
+      '500':
+        description: Ошибка очистки логов
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 /api/config:
   get:
     tags:

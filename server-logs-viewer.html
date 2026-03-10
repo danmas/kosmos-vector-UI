@@ -442,12 +442,21 @@
             
             try {
                 const url = `/api/logs?context-code=${encodeURIComponent(contextCode)}`;
-                await fetch(url, { method: 'DELETE' });
+                const response = await fetch(url, { method: 'DELETE' });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Server error: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log(`[Clear] ${result.message}. Deleted: ${result.deletedCount} logs, ${result.deletedSessions || 0} sessions`);
+                
                 allLogs = [];
                 renderLogs(allLogs);
             } catch (err) {
                 console.error('Error clearing logs:', err);
-                alert('Failed to clear logs');
+                alert('Failed to clear logs: ' + err.message);
             }
         }
         

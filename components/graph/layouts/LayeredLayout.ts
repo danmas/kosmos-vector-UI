@@ -53,6 +53,26 @@ export class LayeredLayout implements LayoutEngine {
     // Очищаем контейнер
     container.selectAll('*').remove();
 
+    // Создаём свой маркер для стрелок с правильным refX
+    const svg = container.select(function() { return this.ownerSVGElement; });
+    let defs = svg.select('defs');
+    if (defs.empty()) {
+      defs = svg.append('defs');
+    }
+    // Удаляем старый маркер если есть
+    defs.select('#layered-arrowhead').remove();
+    defs.append('marker')
+      .attr('id', 'layered-arrowhead')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 10)  // Стрелка заканчивается на конце path
+      .attr('refY', 0)
+      .attr('markerWidth', 8)
+      .attr('markerHeight', 8)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', '#475569');
+
     // Создаём группы
     this.linksGroup = container.append('g').attr('class', 'layered-links');
     this.labelsGroup = container.append('g').attr('class', 'layered-labels');
@@ -353,7 +373,7 @@ export class LayeredLayout implements LayoutEngine {
       .attr('stroke', LINK_SETTINGS.STROKE_COLOR)
       .attr('stroke-width', LINK_SETTINGS.STROKE_WIDTH)
       .attr('stroke-opacity', 0.6)
-      .attr('marker-end', 'url(#arrowhead)');
+      .attr('marker-end', 'url(#layered-arrowhead)');
 
     linkEnter.merge(linkSelection)
       .attr('d', d => {
@@ -363,17 +383,30 @@ export class LayeredLayout implements LayoutEngine {
         const target = nodeMap.get(targetId);
         
         if (!source || !target || source.x === undefined || target.x === undefined) {
-          console.warn(`[LayeredLayout] Missing coords for link ${sourceId} -> ${targetId}`);
           return '';
         }
 
-        // Используем кривую Безье для более плавных линий
+        // Вектор направления
+        const dx = target.x - source.x;
+        const dy = target.y! - source.y!;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist === 0) return '';
+        
+        // Смещаем конец path к краю узла (14px = радиус узла)
+        const nodeRadius = 14;
+        const endX = target.x - (dx / dist) * nodeRadius;
+        const endY = target.y! - (dy / dist) * nodeRadius;
+
+        // Простая квадратичная Безье с одной контрольной точкой
         if (isHorizontal) {
-          const midX = (source.x + target.x) / 2;
-          return `M${source.x},${source.y} C${midX},${source.y} ${midX},${target.y} ${target.x},${target.y}`;
+          const midX = (source.x + endX) / 2;
+          return `M${source.x},${source.y} Q${midX},${source.y} ${midX},${(source.y! + endY) / 2} T${endX},${endY}`;
         } else {
-          const midY = (source.y! + target.y!) / 2;
-          return `M${source.x},${source.y} C${source.x},${midY} ${target.x},${midY} ${target.x},${target.y}`;
+          // Для вертикального - прямая линия с небольшим изгибом
+          const midY = (source.y! + endY) / 2;
+          // Контрольная точка смещена по X к source для первой половины, к target для второй
+          return `M${source.x},${source.y} C${source.x},${midY} ${endX},${midY} ${endX},${endY}`;
         }
       });
   }
@@ -572,14 +605,23 @@ export class LayeredLayout implements LayoutEngine {
 
     this.linksGroup.selectAll<SVGPathElement, GraphLink>('path')
       .attr('d', d => {
-        const sourceId = typeof d.source === 'string' ? d.source : d.source.id;
-        const targetId = typeof d.target === 'string' ? d.target : d.target.id;
+        const sourceId = typeof d.source === 'string' ? d.source : (d.source as any)?.id;
+        const targetId = typeof d.target === 'string' ? d.target : (d.target as any)?.id;
         const source = nodeMap.get(sourceId);
         const target = nodeMap.get(targetId);
-        if (!source || !target) return '';
+        if (!source || !target || source.x === undefined || target.x === undefined) return '';
 
-        const midY = (source.y! + target.y!) / 2;
-        return `M${source.x},${source.y} C${source.x},${midY} ${target.x},${midY} ${target.x},${target.y}`;
+        const dx = target.x - source.x;
+        const dy = target.y! - source.y!;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return '';
+        
+        const nodeRadius = 14;
+        const endX = target.x - (dx / dist) * nodeRadius;
+        const endY = target.y! - (dy / dist) * nodeRadius;
+        const midY = (source.y! + endY) / 2;
+        
+        return `M${source.x},${source.y} C${source.x},${midY} ${endX},${midY} ${endX},${endY}`;
       });
 
     this.labelsGroup.selectAll<SVGTextElement, GraphLink>('text')

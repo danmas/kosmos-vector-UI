@@ -80,9 +80,10 @@ export class CallTreeLayout implements LayoutEngine {
 
     const { rootNodeId, treeDirection = 'top-down', maxDepth = 3, linkTypes = [] } = config;
 
-    // Если нет корневого узла - показываем сообщение
+    // Если нет корневого узла - показываем все узлы для выбора
     if (!rootNodeId) {
-      this.showPlaceholder('Выберите узел для построения дерева (двойной клик)');
+      console.log(`[CallTreeLayout] [Режим выбора root] Показываем ${nodes.length} узлов для выбора`);
+      this.renderNodeSelectionMode(nodes, callbacks);
       return;
     }
 
@@ -280,6 +281,106 @@ export class CallTreeLayout implements LayoutEngine {
       .transition()
       .duration(300)
       .style('opacity', 1)
+      .attr('transform', d => `translate(${d.x},${d.y})`);
+  }
+
+  /** Режим выбора root узла - показываем все узлы в виде сетки */
+  private renderNodeSelectionMode(
+    nodes: GraphNode[],
+    callbacks: LayoutCallbacks
+  ): void {
+    if (!this.container || !this.nodesGroup || !this.linksGroup) return;
+
+    // Очищаем
+    this.linksGroup.selectAll('*').remove();
+    this.labelsGroup?.selectAll('*').remove();
+    this.container.selectAll('.placeholder').remove();
+
+    // Показываем подсказку
+    this.container.append('text')
+      .attr('class', 'placeholder')
+      .attr('x', this.width / 2)
+      .attr('y', 30)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#94a3b8')
+      .attr('font-size', '13px')
+      .text('Двойной клик на узел для выбора корня дерева');
+
+    // Располагаем узлы в сетке
+    const padding = 60;
+    const nodeRadius = 16;
+    const spacing = 80;
+    const cols = Math.floor((this.width - padding * 2) / spacing) || 1;
+
+    const positionedNodes = nodes.map((node, i) => ({
+      ...node,
+      x: padding + (i % cols) * spacing + spacing / 2,
+      y: padding + 40 + Math.floor(i / cols) * spacing,
+    }));
+
+    // Data join
+    const nodeSelection = this.nodesGroup
+      .selectAll<SVGGElement, typeof positionedNodes[0]>('g.selection-node')
+      .data(positionedNodes, d => d.id);
+
+    // EXIT
+    nodeSelection.exit().remove();
+
+    // ENTER
+    const nodeEnter = nodeSelection.enter()
+      .append('g')
+      .attr('class', 'selection-node')
+      .style('cursor', 'pointer')
+      .attr('transform', d => `translate(${d.x},${d.y})`);
+
+    // Форма узла
+    nodeEnter.append('circle')
+      .attr('r', nodeRadius)
+      .attr('fill', d => getNodeColor(d.type))
+      .attr('stroke', DEFAULT_STROKE)
+      .attr('stroke-width', 2);
+
+    // Метка
+    nodeEnter.append('text')
+      .text(d => d.id.split('.').pop() || d.id)
+      .attr('x', nodeRadius + 4)
+      .attr('y', 4)
+      .attr('fill', '#cbd5e1')
+      .attr('font-size', '10px')
+      .style('pointer-events', 'none');
+
+    // События
+    nodeEnter
+      .on('click', (event, d) => {
+        if (callbacks.onNodeClick) {
+          callbacks.onNodeClick(event, d as GraphNode);
+        }
+      })
+      .on('dblclick', (event, d) => {
+        event.stopPropagation();
+        if (callbacks.onNodeDblClick) {
+          callbacks.onNodeDblClick(event, d as GraphNode);
+        }
+      })
+      .on('mouseenter', (event, d) => {
+        d3.select(event.currentTarget).select('circle')
+          .attr('stroke', '#22c55e')
+          .attr('stroke-width', 3);
+        if (callbacks.onNodeMouseEnter) {
+          callbacks.onNodeMouseEnter(event, d as GraphNode);
+        }
+      })
+      .on('mouseleave', (event, d) => {
+        d3.select(event.currentTarget).select('circle')
+          .attr('stroke', DEFAULT_STROKE)
+          .attr('stroke-width', 2);
+        if (callbacks.onNodeMouseLeave) {
+          callbacks.onNodeMouseLeave(event, d as GraphNode);
+        }
+      });
+
+    // UPDATE
+    nodeSelection
       .attr('transform', d => `translate(${d.x},${d.y})`);
   }
 

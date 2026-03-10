@@ -372,12 +372,28 @@ export class ProjectTreeLayout implements LayoutEngine {
           callbacks.onNodeDblClick(event, d.data as unknown as GraphNode);
         }
       })
-      .on('mouseenter', (event, d) => {
+      .on('mouseenter', function(event, d) {
+        // Hover эффект для папок
+        if (d.data.isVirtual && (d.children || (d.data as any)._children)) {
+          d3.select(this).select('rect')
+            .attr('fill', '#f59e0b') // Оранжевый hover
+            .attr('stroke', '#fbbf24');
+          d3.select(this).select('.collapse-icon')
+            .attr('fill', '#fbbf24');
+        }
         if (!d.data.isVirtual && callbacks.onNodeMouseEnter) {
           callbacks.onNodeMouseEnter(event, d.data as unknown as GraphNode);
         }
       })
-      .on('mouseleave', (event, d) => {
+      .on('mouseleave', function(event, d) {
+        // Сброс hover
+        if (d.data.isVirtual) {
+          d3.select(this).select('rect')
+            .attr('fill', VIRTUAL_NODE_COLORS.FOLDER)
+            .attr('stroke', '#475569');
+          d3.select(this).select('.collapse-icon')
+            .attr('fill', '#64748b');
+        }
         if (!d.data.isVirtual && callbacks.onNodeMouseLeave) {
           callbacks.onNodeMouseLeave(event, d.data as unknown as GraphNode);
         }

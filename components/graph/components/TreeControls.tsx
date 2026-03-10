@@ -29,6 +29,15 @@ const DIRECTION_OPTIONS: { value: TreeDirection; label: string; icon: string }[]
 /** Опции глубины */
 const DEPTH_OPTIONS = [1, 2, 3, 4, 5];
 
+/** Типы связей для Call Tree */
+const LINK_TYPE_OPTIONS: { value: string; label: string; color: string }[] = [
+  { value: 'calls', label: 'calls', color: 'bg-blue-500' },
+  { value: 'imports', label: 'imports', color: 'bg-purple-500' },
+  { value: 'reads_from', label: 'reads', color: 'bg-green-500' },
+  { value: 'updates', label: 'updates', color: 'bg-amber-500' },
+  { value: 'depends_on', label: 'depends', color: 'bg-slate-500' },
+];
+
 /** Опции группировки для Project Tree */
 const GROUP_BY_OPTIONS: { value: ProjectTreeGroupBy; label: string }[] = [
   { value: 'file', label: 'File Path' },
@@ -99,6 +108,41 @@ export const TreeControls: React.FC<TreeControlsProps> = ({
                   {depth}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Типы связей */}
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-slate-500 uppercase">Links:</span>
+            <div className="flex gap-1">
+              {LINK_TYPE_OPTIONS.map(({ value, label, color }) => {
+                const isActive = config.linkTypes?.includes(value) ?? 
+                  (value === 'calls' || value === 'imports'); // дефолт
+                return (
+                  <button
+                    key={value}
+                    onClick={() => {
+                      const currentTypes = config.linkTypes ?? ['calls', 'imports'];
+                      const newTypes = isActive
+                        ? currentTypes.filter(t => t !== value)
+                        : [...currentTypes, value];
+                      onChange({ linkTypes: newTypes.length > 0 ? newTypes : ['calls'] });
+                    }}
+                    disabled={disabled}
+                    title={value}
+                    className={`
+                      px-1.5 py-0.5 rounded text-[9px] font-medium border
+                      ${isActive
+                        ? `${color} text-white border-transparent`
+                        : 'bg-slate-800 text-slate-500 border-slate-600 hover:text-slate-300'
+                      }
+                      disabled:opacity-50
+                    `}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -78,7 +78,9 @@ export class CallTreeLayout implements LayoutEngine {
       return;
     }
 
-    const { rootNodeId, treeDirection = 'top-down', maxDepth = 3, linkTypes = [] } = config;
+    const { rootNodeId, treeDirection = 'top-down', maxDepth = 3, linkTypes } = config;
+    // Дефолтные типы связей
+    const effectiveLinkTypes = linkTypes && linkTypes.length > 0 ? linkTypes : ['calls', 'imports'];
 
     // Если нет корневого узла - показываем все узлы для выбора
     if (!rootNodeId) {
@@ -87,7 +89,11 @@ export class CallTreeLayout implements LayoutEngine {
       return;
     }
 
-    console.log(`[CallTreeLayout] [${getTimeStamp()}] Обновление: root=${rootNodeId}, direction=${treeDirection}, depth=${maxDepth}`);
+    console.log(`[CallTreeLayout] [${getTimeStamp()}] Обновление: root=${rootNodeId}, direction=${treeDirection}, depth=${maxDepth}, linkTypes=${effectiveLinkTypes.join(',')}`);
+
+    // Очищаем узлы режима выбора и placeholder
+    this.nodesGroup?.selectAll('g.selection-node').remove();
+    this.container?.selectAll('.placeholder').remove();
 
     // Строим иерархию
     const hierarchyData = buildCallHierarchy(
@@ -96,7 +102,7 @@ export class CallTreeLayout implements LayoutEngine {
       links,
       treeDirection as 'top-down' | 'bottom-up',
       maxDepth,
-      linkTypes
+      effectiveLinkTypes
     );
 
     if (!hierarchyData) {

@@ -310,6 +310,8 @@ export const buildCallHierarchy = (
   maxDepth: number = 3,
   allowedLinkTypes: string[] = ['calls', 'imports']
 ): HierarchyNodeData | null => {
+  console.log(`[buildCallHierarchy] root=${rootId}, direction=${direction}, maxDepth=${maxDepth}, allowedTypes=[${allowedLinkTypes.join(',')}]`);
+  
   const nodesMap = new Map<string, GraphNode>();
   nodes.forEach(n => nodesMap.set(n.id, n));
 

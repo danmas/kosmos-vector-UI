@@ -647,6 +647,15 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     addToSessionHistory(d.id);
     setLastTooltipHighlightedNodeId(null);
 
+    // В режиме call-tree обычный клик устанавливает root
+    if (layoutMode === 'call-tree') {
+      setLayoutConfig(prev => ({
+        ...prev,
+        rootNodeId: d.id
+      }));
+      return;
+    }
+
     // Alt+клик — оставляем ТОЛЬКО этот узел и его связи
     if (event.altKey) {
       event.stopPropagation();
@@ -670,7 +679,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       newFocusSet.add(d.id);
       setFocusedNodeIds(newFocusSet);
     }
-  }, [filteredItemIds, focusedNodeIds, findRelatedNodes, setGraphSearch, setFilteredItemIds]);
+  }, [filteredItemIds, focusedNodeIds, findRelatedNodes, setGraphSearch, setFilteredItemIds, layoutMode]);
 
   // Обработчик двойного клика
   const handleNodeDblClick = useCallback((event: any, d: any) => {
@@ -1614,12 +1623,21 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             mode={layoutMode}
             onChange={(mode) => {
               setLayoutMode(mode);
-              // При переключении на call-tree устанавливаем root если есть фокус
-              if (mode === 'call-tree' && focusedNodeIds.size === 1) {
+              // При переключении на call-tree устанавливаем root из истории кликов
+              if (mode === 'call-tree') {
+                // Ищем root: сначала последний клик, потом focusedNode
+                const lastClicked = sessionClickHistory.length > 0 
+                  ? sessionClickHistory[sessionClickHistory.length - 1] 
+                  : null;
+                const focusedNode = focusedNodeIds.size === 1 
+                  ? Array.from(focusedNodeIds)[0] 
+                  : null;
+                const rootId = lastClicked || focusedNode;
+                
                 setLayoutConfig(prev => ({
                   ...prev,
                   mode,
-                  rootNodeId: Array.from(focusedNodeIds)[0]
+                  rootNodeId: rootId || prev.rootNodeId
                 }));
               } else {
                 setLayoutConfig(prev => ({ ...prev, mode }));

@@ -8,6 +8,18 @@ import { L0SourceView, L1ConnectivityView, L2SemanticsView } from './tabs';
 import NaturalQueryDialog from './NaturalQueryDialog';
 import TagsDialog from './TagsDialog';
 
+// === Graph Layout Module ===
+import {
+  GraphLayoutMode,
+  LayoutConfig,
+  DEFAULT_LAYOUT_CONFIG,
+  LayoutSwitcher,
+  TreeControls,
+  useGraphLayout,
+  GraphNode as LayoutGraphNode,
+  GraphLink as LayoutGraphLink,
+} from './graph';
+
 interface KnowledgeGraphProps {
   // Props are now optional since we fetch data internally
 }
@@ -99,6 +111,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const containerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const isInitializedRef = useRef(false);
+  const [isGraphInitialized, setIsGraphInitialized] = useState(false);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +124,10 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
   const [hiddenLinkTypes, setHiddenLinkTypes] = useState<Set<string>>(new Set());
   const [showLegend, setShowLegend] = useState(false);
+
+  // === Layout Mode States ===
+  const [layoutMode, setLayoutMode] = useState<GraphLayoutMode>('force');
+  const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(DEFAULT_LAYOUT_CONFIG);
 
   // Состояния для модального окна деталей узла
   const [modalNodeId, setModalNodeId] = useState<string | null>(null);
@@ -660,6 +677,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     event.stopPropagation();
     addToClickHistory(d.id);
     addToSessionHistory(d.id);
+
+    // В режиме call-tree устанавливаем узел как root
+    if (layoutMode === 'call-tree') {
+      setLayoutConfig(prev => ({
+        ...prev,
+        rootNodeId: d.id
+      }));
+      setFocusedNodeIds(new Set([d.id]));
+      return;
+    }
+
+    // Стандартное поведение для force layout
     if (focusedNodeIds.has(d.id)) {
       const newSet = new Set(focusedNodeIds);
       newSet.delete(d.id);
@@ -667,7 +696,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     } else {
       setFocusedNodeIds(new Set([d.id]));
     }
-  }, [focusedNodeIds]);
+  }, [focusedNodeIds, layoutMode]);
 
   // Обработчик наведения на узел (tooltip)
   const handleNodeMouseEnter = useCallback((event: any, d: any) => {
@@ -1044,6 +1073,42 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
   const displayGraphData = finalFilteredGraphData;
 
+  // === Хук для управления tree layout'ами ===
+  const layoutCallbacks = useMemo(() => ({
+    onNodeClick: handleNodeClick,
+    onNodeDblClick: handleNodeDblClick,
+    onNodeMouseEnter: handleNodeMouseEnter,
+    onNodeMouseLeave: handleNodeMouseLeave,
+  }), [handleNodeClick, handleNodeDblClick, handleNodeMouseEnter, handleNodeMouseLeave]);
+
+  const treeLayoutNodes = useMemo(() => 
+    (displayGraphData?.nodes || []) as LayoutGraphNode[],
+    [displayGraphData]
+  );
+
+  const treeLayoutLinks = useMemo(() => 
+    (displayGraphData?.links || []) as LayoutGraphLink[],
+    [displayGraphData]
+  );
+
+  const { forceUpdate: forceTreeUpdate } = useGraphLayout({
+    svgRef,
+    containerRef: containerRef as any,
+    mode: layoutMode,
+    config: layoutConfig,
+    nodes: treeLayoutNodes,
+    links: treeLayoutLinks,
+    callbacks: layoutCallbacks,
+    enabled: layoutMode !== 'force' && isGraphInitialized,
+  });
+
+  // Принудительное обновление tree при изменении конфигурации
+  useEffect(() => {
+    if (layoutMode !== 'force') {
+      forceTreeUpdate();
+    }
+  }, [layoutMode, layoutConfig, forceTreeUpdate]);
+
   // === USEEFFECT ИНИЦИАЛИЗАЦИИ SVG (один раз) ===
   useEffect(() => {
     if (isLoading || !svgRef.current || isInitializedRef.current) return;
@@ -1209,6 +1274,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       .stop();
 
     isInitializedRef.current = true;
+    setIsGraphInitialized(true);
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] SVG инициализирован`);
 
     return () => {
@@ -1220,6 +1286,11 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
   // === USEEFFECT ИНКРЕМЕНТАЛЬНОГО ОБНОВЛЕНИЯ ГРАФА ===
   useEffect(() => {
+    // Пропускаем force layout если активен tree режим
+    if (layoutMode !== 'force') {
+      return;
+    }
+
     if (!isInitializedRef.current || !containerRef.current || !simulationRef.current || !displayGraphData) {
       return;
     }
@@ -1234,6 +1305,17 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     const container = containerRef.current;
     const width = svgRef.current?.clientWidth || 800;
     const height = svgRef.current?.clientHeight || 600;
+
+    // === Восстановление групп если они были удалены tree layout'ом ===
+    if (container.select('.links-group').empty()) {
+      console.log(`[KnowledgeGraph] [${getTimeStamp()}] Восстановление групп после tree layout`);
+      container.selectAll('*').remove(); // Удаляем всё что осталось от tree
+      container.append('g').attr('class', 'links-group')
+        .attr('stroke', '#475569')
+        .attr('stroke-opacity', 0.6);
+      container.append('g').attr('class', 'link-labels-group');
+      container.append('g').attr('class', 'nodes-group');
+    }
 
     // Подготовка узлов с сохранением позиций
     const nodes: any[] = displayGraphData.nodes.map(d => {
@@ -1375,7 +1457,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
 
     console.log(`[KnowledgeGraph] [${getTimeStamp()}] Обновление завершено за ${(performance.now() - updateStart).toFixed(1)}ms`);
 
-  }, [displayGraphData, handleNodeClick, handleNodeDblClick, handleNodeMouseEnter, handleNodeMouseLeave, createNodeShape, clickHistory]);
+  }, [displayGraphData, handleNodeClick, handleNodeDblClick, handleNodeMouseEnter, handleNodeMouseLeave, createNodeShape, clickHistory, layoutMode]);
 
   // === USEEFFECT ОБНОВЛЕНИЯ ОБВОДКИ УЗЛОВ ===
   useEffect(() => {
@@ -1526,6 +1608,24 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             </svg>
             Filter
           </button>
+
+          {/* Layout Mode Switcher */}
+          <LayoutSwitcher
+            mode={layoutMode}
+            onChange={(mode) => {
+              setLayoutMode(mode);
+              // При переключении на call-tree устанавливаем root если есть фокус
+              if (mode === 'call-tree' && focusedNodeIds.size === 1) {
+                setLayoutConfig(prev => ({
+                  ...prev,
+                  mode,
+                  rootNodeId: Array.from(focusedNodeIds)[0]
+                }));
+              } else {
+                setLayoutConfig(prev => ({ ...prev, mode }));
+              }
+            }}
+          />
           {focusedNodeIds.size > 0 && (
             <div className="flex items-center gap-1">
               <span className="bg-blue-900/30 border border-blue-700/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded flex flex-col gap-0.5 max-h-[3em] overflow-y-auto">
@@ -1556,6 +1656,18 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
                 {type}
               </label>
             ))}
+          </div>
+        )}
+
+        {/* Tree Layout Controls */}
+        {layoutMode !== 'force' && (
+          <div className="mt-2">
+            <TreeControls
+              mode={layoutMode}
+              config={layoutConfig}
+              onChange={(updates) => setLayoutConfig(prev => ({ ...prev, ...updates }))}
+              selectedNodeId={layoutConfig.rootNodeId || (focusedNodeIds.size === 1 ? Array.from(focusedNodeIds)[0] : null)}
+            />
           </div>
         )}
       </div>

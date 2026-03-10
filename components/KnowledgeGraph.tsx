@@ -1090,10 +1090,24 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     onNodeMouseLeave: handleNodeMouseLeave,
   }), [handleNodeClick, handleNodeDblClick, handleNodeMouseEnter, handleNodeMouseLeave]);
 
-  const treeLayoutNodes = useMemo(() => 
-    (displayGraphData?.nodes || []) as LayoutGraphNode[],
-    [displayGraphData]
-  );
+  const treeLayoutNodes = useMemo(() => {
+    const nodes = (displayGraphData?.nodes || []) as LayoutGraphNode[];
+    // Обогащаем узлы тегами из itemsList для Clustered layout
+    const itemsListData = getItemsList();
+    if (itemsListData?.data) {
+      const itemTagsLookup = new Map<string, { code: string; name?: string }[]>();
+      for (const item of itemsListData.data) {
+        if (item.tags && item.tags.length > 0) {
+          itemTagsLookup.set(item.id, item.tags.map(t => ({ code: t.code, name: t.name })));
+        }
+      }
+      return nodes.map(node => ({
+        ...node,
+        tags: itemTagsLookup.get(node.id)
+      }));
+    }
+    return nodes;
+  }, [displayGraphData, getItemsList]);
 
   const treeLayoutLinks = useMemo(() => 
     (displayGraphData?.links || []) as LayoutGraphLink[],

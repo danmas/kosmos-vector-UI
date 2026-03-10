@@ -1,18 +1,21 @@
 /**
  * Типы для модуля визуализации графа
- * Поддержка нескольких режимов отображения: Force, Call Tree, Project Tree
+ * Поддержка нескольких режимов отображения: Force, Call Tree, Project Tree, Clustered
  */
 
 import * as d3 from 'd3';
 
 /** Режимы отображения графа */
-export type GraphLayoutMode = 'force' | 'call-tree' | 'project-tree';
+export type GraphLayoutMode = 'force' | 'call-tree' | 'project-tree' | 'clustered';
 
 /** Направление отрисовки дерева */
 export type TreeDirection = 'top-down' | 'bottom-up' | 'left-right' | 'right-left';
 
 /** Группировка для Project Tree */
 export type ProjectTreeGroupBy = 'file' | 'package' | 'type';
+
+/** Группировка для кластеризации */
+export type ClusterGroupBy = 'type' | 'package' | 'file-dir' | 'tags' | 'auto';
 
 /** Конфигурация layout'а */
 export interface LayoutConfig {
@@ -34,6 +37,12 @@ export interface LayoutConfig {
   /** Показывать свёрнутые узлы */
   collapsedNodes?: Set<string>;
   
+  // === Для clustered ===
+  /** Группировка кластеров */
+  clusterBy?: ClusterGroupBy;
+  /** Показывать границы кластеров */
+  showClusterHulls?: boolean;
+  
   // === Общие ===
   /** История кликов для выделения узлов */
   clickHistory?: string[];
@@ -46,6 +55,7 @@ export interface GraphNode {
   language: string;
   filePath: string;
   l2_desc?: string;
+  tags?: { code: string; name?: string }[]; // Теги узла
   // Координаты (заполняются layout'ом)
   x?: number;
   y?: number;
@@ -127,5 +137,7 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   maxDepth: 3,
   linkTypes: ['calls', 'imports', 'reads_from', 'updates'],
   groupBy: 'file',
-  collapsedNodes: new Set()
+  collapsedNodes: new Set(),
+  clusterBy: 'type',
+  showClusterHulls: true
 };

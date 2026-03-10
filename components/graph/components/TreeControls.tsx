@@ -1,10 +1,10 @@
 /**
- * TreeControls - Панель управления настройками tree layout'ов
- * Показывается когда активен режим Call Tree или Project Tree
+ * TreeControls - Панель управления настройками layout'ов
+ * Показывается когда активен режим Call Tree, Project Tree или Clustered
  */
 
 import React from 'react';
-import { LayoutConfig, GraphLayoutMode, TreeDirection, ProjectTreeGroupBy } from '../types';
+import { LayoutConfig, GraphLayoutMode, TreeDirection, ProjectTreeGroupBy, ClusterGroupBy } from '../types';
 
 interface TreeControlsProps {
   /** Текущий режим layout'а */
@@ -43,6 +43,14 @@ const GROUP_BY_OPTIONS: { value: ProjectTreeGroupBy; label: string }[] = [
   { value: 'file', label: 'File Path' },
   { value: 'package', label: 'Package' },
   { value: 'type', label: 'Type' },
+];
+
+/** Опции группировки для Clustered */
+const CLUSTER_BY_OPTIONS: { value: ClusterGroupBy; label: string; icon: string }[] = [
+  { value: 'type', label: 'Type', icon: '🌐' },
+  { value: 'package', label: 'Package', icon: '📦' },
+  { value: 'file-dir', label: 'Directory', icon: '📂' },
+  { value: 'tags', label: 'Tags', icon: '🏷️' },
 ];
 
 export const TreeControls: React.FC<TreeControlsProps> = ({
@@ -203,6 +211,54 @@ export const TreeControls: React.FC<TreeControlsProps> = ({
               Expand All
             </button>
           )}
+        </>
+      )}
+
+      {/* === Clustered Controls === */}
+      {mode === 'clustered' && (
+        <>
+          {/* Группировка кластеров */}
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-slate-500 uppercase">Cluster by:</span>
+            <div className="flex gap-0.5">
+              {CLUSTER_BY_OPTIONS.map(({ value, label, icon }) => (
+                <button
+                  key={value}
+                  onClick={() => onChange({ clusterBy: value })}
+                  disabled={disabled}
+                  title={label}
+                  className={`
+                    px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1
+                    ${config.clusterBy === value
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600'
+                    }
+                    disabled:opacity-50
+                  `}
+                >
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Показ границ кластеров */}
+          <button
+            onClick={() => onChange({ showClusterHulls: !config.showClusterHulls })}
+            disabled={disabled}
+            title="Показать/скрыть границы кластеров"
+            className={`
+              px-2 py-0.5 rounded text-[10px] font-medium
+              ${config.showClusterHulls !== false
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600'
+              }
+              disabled:opacity-50
+            `}
+          >
+            {config.showClusterHulls !== false ? '🛶 Hulls ON' : '⚫ Hulls OFF'}
+          </button>
         </>
       )}
     </div>

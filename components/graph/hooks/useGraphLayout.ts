@@ -1,6 +1,6 @@
 /**
  * useGraphLayout - Хук для управления layout engine'ами графа
- * Переключает между Force, Call Tree и Project Tree layout'ами
+ * Переключает между Force, Call Tree, Project Tree и Clustered layout'ами
  */
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -8,6 +8,7 @@ import * as d3 from 'd3';
 import { GraphLayoutMode, LayoutEngine, LayoutConfig, LayoutCallbacks, GraphNode, GraphLink } from '../types';
 import { CallTreeLayout } from '../layouts/CallTreeLayout';
 import { ProjectTreeLayout } from '../layouts/ProjectTreeLayout';
+import { ClusteredLayout } from '../layouts/ClusteredLayout';
 
 interface UseGraphLayoutOptions {
   /** SVG ref для графа */
@@ -91,6 +92,8 @@ export const useGraphLayout = ({
         layoutEngineRef.current = new CallTreeLayout();
       } else if (mode === 'project-tree') {
         layoutEngineRef.current = new ProjectTreeLayout();
+      } else if (mode === 'clustered') {
+        layoutEngineRef.current = new ClusteredLayout();
       }
 
       if (layoutEngineRef.current) {

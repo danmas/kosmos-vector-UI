@@ -1,6 +1,6 @@
 /**
  * LayoutSwitcher - Переключатель режимов отображения графа
- * Компактная панель с кнопками: Force | Call Tree | Project Tree
+ * Компактная панель с кнопками: Force | Call Tree | Project Tree | Clustered
  */
 
 import React from 'react';
@@ -34,6 +34,12 @@ const LAYOUT_MODES: { mode: GraphLayoutMode; label: string; icon: string; title:
     label: 'Project', 
     icon: '📁',
     title: 'Project Tree: дерево по структуре файлов/пакетов'
+  },
+  { 
+    mode: 'clustered', 
+    label: 'Clustered', 
+    icon: '🟣',
+    title: 'Clustered: группировка узлов по кластерам (тип/пакет/директория)'
   },
 ];
 

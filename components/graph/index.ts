@@ -15,6 +15,7 @@ export * from './utils';
 // === Layout Engines ===
 export { CallTreeLayout } from './layouts/CallTreeLayout';
 export { ProjectTreeLayout } from './layouts/ProjectTreeLayout';
+export { ClusteredLayout } from './layouts/ClusteredLayout';
 
 // === Hooks ===
 export { useGraphLayout } from './hooks/useGraphLayout';

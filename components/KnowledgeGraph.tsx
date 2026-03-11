@@ -84,6 +84,8 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     selectedTypes,
     tagFilterEnabled,
     selectedTagCodes,
+    fileFilterEnabled,
+    selectedFilePaths,
     setIsFilterDialogOpen
   } = useGraphFilter();
   const [showHistory, setShowHistory] = useState(false);
@@ -1059,6 +1061,12 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         if (!nodeTags || !Array.from(selectedTagCodes).some(code => nodeTags.has(code))) return false;
       }
 
+      // Фильтр по файлам
+      if (fileFilterEnabled && selectedFilePaths.size > 0) {
+        const itemData = itemsListData?.data?.find(item => item.id === node.id);
+        if (!itemData || !selectedFilePaths.has(itemData.filePath)) return false;
+      }
+
       return true;
     });
 
@@ -1076,7 +1084,7 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, getItemsList, hiddenLinkTypes]);
+  }, [graphData, graphSearch, focusedNodeIds, filteredItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths, getItemsList, hiddenLinkTypes]);
 
   // Фильтрация при фокусе на узлах (двойной клик / Ctrl+клик) - ТЕПЕРЬ ОТКЛЮЧЕНА, 
   // так как мы хотим аддитивное поведение в finalFilteredGraphData
@@ -1626,11 +1634,11 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
           </button>
           <button
             onClick={() => setIsFilterDialogOpen(true)}
-            className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${(typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+            className={`text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg ${(typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0) || (fileFilterEnabled && selectedFilePaths.size > 0)
               ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
               : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
               }`}
-            title="Фильтры по типам и тегам"
+            title="Фильтры по типам, тегам и файлам"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />

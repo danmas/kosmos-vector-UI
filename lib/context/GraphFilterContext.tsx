@@ -29,6 +29,13 @@ export interface GraphFilterContextValue {
   toggleTag: (tagCode: string) => void;
   setAllTags: (tagCodes: string[]) => void;
 
+  // Фильтры по файлам
+  fileFilterEnabled: boolean;
+  setFileFilterEnabled: (enabled: boolean) => void;
+  selectedFilePaths: Set<string>;
+  toggleFile: (filePath: string) => void;
+  setAllFiles: (filePaths: string[]) => void;
+
   // Диалог фильтрации
   isFilterDialogOpen: boolean;
   setIsFilterDialogOpen: (open: boolean) => void;
@@ -59,6 +66,10 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
   // Фильтры по тегам
   const [tagFilterEnabled, setTagFilterEnabled] = useState(false);
   const [selectedTagCodes, setSelectedTagCodes] = useState<Set<string>>(new Set());
+
+  // Фильтры по файлам
+  const [fileFilterEnabled, setFileFilterEnabled] = useState(false);
+  const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
 
   // Диалог фильтрации
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
@@ -115,6 +126,19 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
     setSelectedTagCodes(new Set(tagCodes));
   }, []);
 
+  const toggleFile = useCallback((filePath: string) => {
+    setSelectedFilePaths(prev => {
+      const next = new Set(prev);
+      if (next.has(filePath)) next.delete(filePath);
+      else next.add(filePath);
+      return next;
+    });
+  }, []);
+
+  const setAllFiles = useCallback((filePaths: string[]) => {
+    setSelectedFilePaths(new Set(filePaths));
+  }, []);
+
   // Очистка всех фильтров (используется при смене контекста)
   const clearFilters = useCallback(() => {
     setFilteredItemIds(new Set());
@@ -124,6 +148,8 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
     setSelectedTypes(new Set());
     setTagFilterEnabled(false);
     setSelectedTagCodes(new Set());
+    setFileFilterEnabled(false);
+    setSelectedFilePaths(new Set());
     localStorage.removeItem(KEYS.INSPECTOR);
     localStorage.removeItem(KEYS.GRAPH);
     console.log('[GraphFilter] All filters cleared due to context change');
@@ -152,6 +178,12 @@ export const GraphFilterProvider: React.FC<{ children: ReactNode }> = ({ childre
     selectedTagCodes,
     toggleTag,
     setAllTags,
+    // Файлы
+    fileFilterEnabled,
+    setFileFilterEnabled,
+    selectedFilePaths,
+    toggleFile,
+    setAllFiles,
     // Диалог
     isFilterDialogOpen,
     setIsFilterDialogOpen,

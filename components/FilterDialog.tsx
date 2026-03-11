@@ -29,6 +29,7 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
   const {
     typeFilterEnabled, setTypeFilterEnabled, selectedTypes, toggleType, setAllTypes,
     tagFilterEnabled, setTagFilterEnabled, selectedTagCodes, toggleTag, setAllTags,
+    fileFilterEnabled, setFileFilterEnabled, selectedFilePaths, toggleFile, setAllFiles,
   } = useGraphFilter();
 
   const [allTags, setAllTagsData] = useState<Tag[]>([]);
@@ -37,6 +38,9 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
   // Состояние для динамически загруженных типов (новый API)
   const [apiTypes, setApiTypes] = useState<import('../types').ItemType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(false);
+
+  // Состояние для поиска по файлам
+  const [fileSearchQuery, setFileSearchQuery] = useState('');
 
   // Position and Size state
   const [position, setPosition] = useState({ x: window.innerWidth - 450, y: 64 });
@@ -54,6 +58,24 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
     if (!itemsList?.data) return new Set<string>();
     return new Set(itemsList.data.map(item => item.type));
   }, [getItemsList]);
+
+  // Получаем уникальные файлы из текущих items
+  const availableFiles = useMemo(() => {
+    const itemsList = getItemsList();
+    if (!itemsList?.data) return [];
+    const fileSet = new Set<string>();
+    itemsList.data.forEach(item => {
+      if (item.filePath) fileSet.add(item.filePath);
+    });
+    return Array.from(fileSet).sort();
+  }, [getItemsList]);
+
+  // Фильтруем файлы по поисковому запросу
+  const filteredFiles = useMemo(() => {
+    if (!fileSearchQuery.trim()) return availableFiles;
+    const query = fileSearchQuery.toLowerCase();
+    return availableFiles.filter(f => f.toLowerCase().includes(query));
+  }, [availableFiles, fileSearchQuery]);
 
   // Загрузка тегов
   useEffect(() => {
@@ -203,6 +225,9 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
   const allTagsSelected = allTags.length > 0 && allTags.every(t => selectedTagCodes.has(t.code));
   const someTagsSelected = allTags.some(t => selectedTagCodes.has(t.code)) && !allTagsSelected;
 
+  const allFilesSelected = filteredFiles.length > 0 && filteredFiles.every(f => selectedFilePaths.has(f));
+  const someFilesSelected = filteredFiles.some(f => selectedFilePaths.has(f)) && !allFilesSelected;
+
   const handleToggleAllTypes = () => {
     if (allTypesSelected) {
       setAllTypes([]);
@@ -216,6 +241,20 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
       setAllTags([]);
     } else {
       setAllTags(allTags.map(t => t.code));
+    }
+  };
+
+  const handleToggleAllFiles = () => {
+    if (allFilesSelected) {
+      // Снимаем выбор только с отфильтрованных файлов
+      const newSet = new Set(selectedFilePaths);
+      filteredFiles.forEach(f => newSet.delete(f));
+      setAllFiles(Array.from(newSet));
+    } else {
+      // Добавляем все отфильтрованные файлы
+      const newSet = new Set(selectedFilePaths);
+      filteredFiles.forEach(f => newSet.add(f));
+      setAllFiles(Array.from(newSet));
     }
   };
 
@@ -394,13 +433,116 @@ const FilterDialog: React.FC<FilterDialogProps> = ({ isOpen, onClose }) => {
               </div>
             )}
           </div>
+
+          {/* === Секция ФАЙЛЫ === */}
+          <div className="border border-slate-700 rounded-lg overflow-hidden">
+            <div className="bg-slate-800/60 px-3 py-2 flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fileFilterEnabled}
+                  onChange={(e) => setFileFilterEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-200">Учитывать файл</span>
+              </label>
+              {fileFilterEnabled && (
+                <span className="text-[10px] text-slate-500">
+                  {selectedFilePaths.size}/{availableFiles.length}
+                </span>
+              )}
+            </div>
+            
+            {fileFilterEnabled && (
+              <div className="p-2 space-y-1 bg-slate-900/50">
+                {/* Поиск по файлам */}
+                <div className="relative mb-2">
+                  <input
+                    type="text"
+                    placeholder="Поиск по имени файла..."
+                    value={fileSearchQuery}
+                    onChange={(e) => setFileSearchQuery(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  {fileSearchQuery && (
+                    <button
+                      onClick={() => setFileSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {availableFiles.length === 0 ? (
+                  <div className="text-[10px] text-slate-500 text-center py-2 italic">Файлы не найдены</div>
+                ) : filteredFiles.length === 0 ? (
+                  <div className="text-[10px] text-slate-500 text-center py-2 italic">Нет файлов по запросу "{fileSearchQuery}"</div>
+                ) : (
+                  <>
+                    {/* Master checkbox */}
+                    <label className="flex items-center gap-2 p-1.5 rounded bg-slate-800/40 cursor-pointer hover:bg-slate-800/60 border-b border-slate-700 mb-1">
+                      <input
+                        type="checkbox"
+                        checked={allFilesSelected}
+                        ref={el => { if (el) el.indeterminate = someFilesSelected; }}
+                        onChange={handleToggleAllFiles}
+                        className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                      />
+                      <span className="text-[10px] font-medium text-slate-300">
+                        Выбрать все {fileSearchQuery && `(найдено: ${filteredFiles.length})`}
+                      </span>
+                    </label>
+
+                    {/* Список файлов с прокруткой */}
+                    <div className="max-h-40 overflow-y-auto space-y-0.5">
+                      {filteredFiles.map(filePath => {
+                        const isSelected = selectedFilePaths.has(filePath);
+                        const fileName = filePath.split('/').pop() || filePath;
+                        const dirPath = filePath.substring(0, filePath.length - fileName.length - 1) || '.';
+                        
+                        return (
+                          <label
+                            key={filePath}
+                            className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors ${
+                              isSelected ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-slate-800/30 border border-transparent hover:bg-slate-800/50'
+                            }`}
+                            title={filePath}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFile(filePath)}
+                              className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 shrink-0"
+                            />
+                            <span className="w-4 h-4 flex items-center justify-center shrink-0">
+                              <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </span>
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-[11px] text-slate-200 truncate">{fileName}</span>
+                              <span className="text-[9px] text-slate-500 truncate">{dirPath}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}
         <div className="p-3 border-t border-slate-700 bg-slate-800/50 flex justify-between items-center shrink-0">
           <div className="text-[9px] text-slate-500">
             {typeFilterEnabled && <span className="mr-2">Типы: {selectedTypes.size}</span>}
-            {tagFilterEnabled && <span>Теги: {selectedTagCodes.size}</span>}
+            {tagFilterEnabled && <span className="mr-2">Теги: {selectedTagCodes.size}</span>}
+            {fileFilterEnabled && <span>Файлы: {selectedFilePaths.size}</span>}
           </div>
           <button
             onClick={onClose}

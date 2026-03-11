@@ -2,9 +2,10 @@
 
 ## Обзор
 
-Система фильтрации позволяет отфильтровать AI Items (узлы графа и элементы в Inspector) по двум критериям:
+Система фильтрации позволяет отфильтровать AI Items (узлы графа и элементы в Inspector) по трём критериям:
 - **Тип элемента** (function, class, method, module, struct, interface, table, table_column)
 - **Теги** (пользовательские метки, назначенные элементам)
+- **Файл** (фильтрация по исходным файлам, в которых расположены элементы)
 
 Фильтры работают **глобально** и синхронизированно между компонентами **Inspector** и **KnowledgeGraph (L1)**.
 
@@ -31,6 +32,13 @@
 - `toggleTag(tagCode: string)` — переключить выбор тега
 - `setAllTags(tagCodes: string[])` — установить все теги сразу
 - `setTagFilterEnabled(enabled: boolean)` — включить/выключить фильтр
+
+#### Состояние фильтров по файлам:
+- `fileFilterEnabled: boolean` — включен ли фильтр по файлам
+- `selectedFilePaths: Set<string>` — множество выбранных путей файлов
+- `toggleFile(filePath: string)` — переключить выбор файла
+- `setAllFiles(filePaths: string[])` — установить все файлы сразу
+- `setFileFilterEnabled(enabled: boolean)` — включить/выключить фильтр
 
 #### Вспомогательные функции:
 - `clearFilters()` — очистить все фильтры (вызывается при смене контекста)
@@ -67,7 +75,18 @@
 │   [ ] Deprecated (DEP)          │
 │   ...                           │
 ├─────────────────────────────────┤
-│ Типы: 5  Теги: 2      [Готово] │
+│ [✓] Учитывать файл       (3/12) │
+│   [🔍 Поиск по имени...]        │
+│   [~] Выбрать все               │
+│   [✓] 📄 users.sql              │
+│        ./src/db/                │
+│   [✓] 📄 auth.ts                │
+│        ./src/services/          │
+│   [ ] 📄 utils.ts               │
+│        ./src/                   │
+│   ...                           │
+├─────────────────────────────────┤
+│ Типы: 5 Теги: 2 Файлы: 3 [Готово] │
 └─────────────────────────────────┘
 ```
 
@@ -86,7 +105,16 @@
    - Отображение названия тега, кода и описания (tooltip)
    - Выбранные теги подсвечиваются purple-цветом
 
-3. **Интерактивность**:
+3. **Секция файлов**:
+   - Чекбокс "Учитывать файл" — включает/выключает фильтр
+   - **Поиск по имени файла** — текстовое поле для фильтрации списка
+   - Master checkbox "Выбрать все" (работает с отфильтрованным списком)
+   - Список файлов с прокруткой (max-height: 160px)
+   - Отображение: имя файла + путь к директории
+   - Выбранные файлы подсвечиваются emerald-цветом
+   - Источник данных: уникальные `filePath` из текущего `itemsList`
+
+4. **Интерактивность**:
    - Перетаскивание окна (drag)
    - Изменение размера (resize handle в правом нижнем углу)
    - Позиция и размер сохраняются в состоянии компонента
@@ -130,6 +158,11 @@ const filteredItems = useMemo(() => {
     );
   }
 
+  // Фильтр по файлам
+  if (fileFilterEnabled && selectedFilePaths.size > 0) {
+    items = items.filter(item => selectedFilePaths.has(item.filePath));
+  }
+
   // 3. Фильтр по поиску (regex или обычный)
   if (inspectorSearch.trim()) {
     // ... поиск по ID или filePath
@@ -137,8 +170,16 @@ const filteredItems = useMemo(() => {
 
   return items;
 }, [itemsList, inspectorSearch, typeFilterEnabled, selectedTypes, 
-    tagFilterEnabled, selectedTagCodes]);
+    tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths]);
 ```
+
+#### Логика фильтрации по файлам:
+- **Проверка**: Элемент проходит фильтр, если его `filePath` присутствует в `selectedFilePaths`
+- **Формула**: `selectedFilePaths.has(item.filePath)`
+- **Пример**: 
+  - Выбраны файлы: `['./src/users.sql', './src/auth.ts']`
+  - Элемент с `filePath='./src/users.sql'` → **проходит**
+  - Элемент с `filePath='./src/utils.ts'` → **не проходит**
 
 #### Логика фильтрации по тегам:
 - **Проверка**: Элемент проходит фильтр, если **хотя бы один** из его тегов присутствует в `selectedTagCodes`
@@ -229,8 +270,8 @@ const filteredNodes = graphData.nodes.filter(node => {
    - Если **хотя бы один** тег узла есть в `selectedTagCodes` → проходит
 
 3. **Приоритеты**:
-   - Фокус (двойной клик) > Поиск в графе > Фильтр Alt+клик > Поиск в Inspector > Фильтры по типам/тегам
-   - Если включены фильтры типов/тегов, они работают **совместно** (оба должны пройти)
+   - Фокус (двойной клик) > Поиск в графе > Фильтр Alt+клик > Поиск в Inspector > Фильтры по типам/тегам/файлам
+   - Если включены фильтры типов/тегов/файлов, они работают **совместно** (все должны пройти)
 
 4. **Фильтрация связей**:
    После фильтрации узлов остаются только связи между отфильтрованными узлами:
@@ -435,6 +476,8 @@ const clearFilters = useCallback(() => {
   setSelectedTypes(new Set());
   setTagFilterEnabled(false);
   setSelectedTagCodes(new Set());
+  setFileFilterEnabled(false);
+  setSelectedFilePaths(new Set());
   // ...
 }, []);
 ```
@@ -472,6 +515,7 @@ const clearFilters = useCallback(() => {
 **Хранится в памяти** (не персистентно):
 - `typeFilterEnabled`, `selectedTypes`
 - `tagFilterEnabled`, `selectedTagCodes`
+- `fileFilterEnabled`, `selectedFilePaths`
 
 **Хранится в localStorage**:
 - `inspectorSearch`, `graphSearch` (поиск)
@@ -736,7 +780,7 @@ const typesToDisplay = apiTypes.length > 0
 ## Заключение
 
 Система фильтрации в Kosmos Vector UI обеспечивает:
-- **Гибкость**: Динамические типы + теги, regex-поиск
+- **Гибкость**: Динамические типы + теги + файлы, regex-поиск
 - **Кастомизация**: Пользовательские типы через UI
 - **Производительность**: Многоуровневое кэширование
 - **Согласованность**: Синхронизация между компонентами
@@ -744,9 +788,9 @@ const typesToDisplay = apiTypes.length > 0
 
 Основные компоненты:
 - `GraphFilterContext` — глобальное состояние фильтров
-- `FilterDialog` — UI настройки (с динамической загрузкой типов)
+- `FilterDialog` — UI настройки (с динамической загрузкой типов, тегов, файлов)
 - `TypesConfigTab` — CRUD для типов
 - `DataCacheContext` — кэширование типов, графа, списка
 - `Inspector` + `KnowledgeGraph` — применение фильтров
 
-Фильтры работают **аддитивно** (AND между типами и тегами) и учитывают приоритеты других механизмов фильтрации (поиск, фокус).
+Фильтры работают **аддитивно** (AND между типами, тегами и файлами) и учитывают приоритеты других механизмов фильтрации (поиск, фокус).

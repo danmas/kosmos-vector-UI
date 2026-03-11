@@ -56,7 +56,7 @@ const Inspector: React.FC<InspectorProps> = () => {
   // Ref для отслеживания контекста, с которым был выбран элемент
   const selectedIdContextRef = useRef<string | null>(null);
 
-  const { typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, setIsFilterDialogOpen } = useGraphFilter();
+  const { typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths, setIsFilterDialogOpen } = useGraphFilter();
 
 
   
@@ -350,27 +350,32 @@ const Inspector: React.FC<InspectorProps> = () => {
   }, [selectedId, itemsList, currentContextCode]);
   
 
-  // Мемоизируем filteredItems с поддержкой regex, типов и тегов
+  // Мемоизируем filteredItems с поддержкой regex, типов, тегов и файлов
   const filteredItems = useMemo(() => {
     let items = itemsList;
-
+  
     // Фильтр по типам
     if (typeFilterEnabled && selectedTypes.size > 0) {
       items = items.filter(item => selectedTypes.has(item.type));
     }
-
+  
     // Фильтр по тегам
     if (tagFilterEnabled && selectedTagCodes.size > 0) {
       items = items.filter(item =>
         item.tags?.some(tag => selectedTagCodes.has(tag.code))
       );
     }
-
+  
+    // Фильтр по файлам
+    if (fileFilterEnabled && selectedFilePaths.size > 0) {
+      items = items.filter(item => selectedFilePaths.has(item.filePath));
+    }
+  
     // Фильтр по поиску (regex или обычный)
     const trimmedSearch = inspectorSearch.trim();
     if (trimmedSearch) {
       const regexMatch = trimmedSearch.match(/^\/(.+)\/([gimsuy]*)$/);
-
+  
       if (regexMatch) {
         try {
           const regex = new RegExp(regexMatch[1], regexMatch[2] || 'i');
@@ -389,9 +394,9 @@ const Inspector: React.FC<InspectorProps> = () => {
         );
       }
     }
-
+  
     return items;
-  }, [itemsList, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes]);  
+  }, [itemsList, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths]);
  
   // Публикация отфильтрованных ID в контекст для синхронизации с графом
   // Обновляем только при реальном изменении списка ID
@@ -496,11 +501,11 @@ const Inspector: React.FC<InspectorProps> = () => {
               <button
                 onClick={() => setIsFilterDialogOpen(true)}
                 className={`text-xs font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0 ${
-                  (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0)
+                  (typeFilterEnabled && selectedTypes.size > 0) || (tagFilterEnabled && selectedTagCodes.size > 0) || (fileFilterEnabled && selectedFilePaths.size > 0)
                     ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
                     : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
                 }`}
-                title="Фильтры по типам и тегам"
+                title="Фильтры по типам, тегам и файлам"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />

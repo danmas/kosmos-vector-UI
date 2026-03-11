@@ -38,25 +38,15 @@ const AppContent: React.FC = () => {
   const [isPromptsEditorOpen, setIsPromptsEditorOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
-  // Обработчик открытия Server Logs
-  const handleOpenServerLogs = () => {
-    const logsOpenMode = import.meta.env.VITE_SERVER_LOGS_OPEN_MODE || 'window';
-    
-    if (logsOpenMode === 'dialog') {
-      // Открываем во встроенном диалоге
-      setIsLogsDialogOpen(true);
-    } else {
-      // Открываем в браузере
-      const url = `/server-logs-viewer.html?context-code=${encodeURIComponent(contextCode)}`;
-      
-      if (logsOpenMode === 'window') {
-        // Открываем в новом окне
-        window.open(url, '_blank', 'width=1400,height=900,menubar=no,toolbar=no,location=no,status=no');
-      } else {
-        // Открываем в новой вкладке (tab)
-        window.open(url, '_blank');
-      }
-    }
+  // Обработчик открытия Server Logs в диалоге
+  const handleOpenLogsDialog = () => {
+    setIsLogsDialogOpen(true);
+  };
+
+  // Обработчик открытия Server Logs в отдельном окне браузера
+  const handleOpenLogsWindow = () => {
+    const url = `/server-logs-viewer.html?context-code=${encodeURIComponent(contextCode)}`;
+    window.open(url, '_blank', 'width=1400,height=900,menubar=no,toolbar=no,location=no,status=no');
   };
 
   // v2.1.1: Переключатель между legacy и новым API
@@ -388,7 +378,8 @@ const AppContent: React.FC = () => {
       <Sidebar
         currentView={currentView}
         onChangeView={setCurrentView}
-        onOpenLogsDialog={handleOpenServerLogs}
+        onOpenLogsDialog={handleOpenLogsDialog}
+        onOpenLogsWindow={handleOpenLogsWindow}
         onOpenPromptsEditor={() => setIsPromptsEditorOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         contextCode={contextCode}

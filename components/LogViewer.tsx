@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { ServerLog } from '../types';
 import { uiLogger } from '../services/uiLogger';
 
@@ -8,11 +8,15 @@ interface LogViewerProps {
   showControls?: boolean;
 }
 
-const LogViewer: React.FC<LogViewerProps> = ({ 
+export interface LogViewerHandle {
+  clearLogs: () => void;
+}
+
+const LogViewer = forwardRef<LogViewerHandle, LogViewerProps>(({ 
   autoScroll: externalAutoScroll, 
   onAutoScrollChange,
   showControls = true 
-}) => {
+}, ref) => {
   const [logs, setLogs] = useState<ServerLog[]>([]);
   const [internalAutoScroll, setInternalAutoScroll] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -106,6 +110,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
     setExpandedLogs(new Set());
     uiLogger.clearBuffer();
   };
+
+  // Expose clearLogs to parent via ref
+  useImperativeHandle(ref, () => ({
+    clearLogs
+  }));
 
   const toggleLogDetails = (logId: string) => {
     setExpandedLogs(prev => {
@@ -303,6 +312,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
       </div>
     </div>
   );
-};
+});
+
+LogViewer.displayName = 'LogViewer';
 
 export default LogViewer;

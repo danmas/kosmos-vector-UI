@@ -383,18 +383,41 @@ export const buildCallHierarchy = (
 
 /**
  * Создать path для curved link (для tree layout)
+ * Стрелка правильно ориентирована по направлению к target
  */
 export const createCurvedLinkPath = (
   source: { x: number; y: number },
   target: { x: number; y: number },
   direction: 'vertical' | 'horizontal' = 'vertical'
 ): string => {
+  // Вектор направления
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  if (dist === 0) return '';
+  
+  // Нормализованный вектор
+  const nx = dx / dist;
+  const ny = dy / dist;
+  
+  // Смещаем конец path к краю узла (16px = радиус узла)
+  const nodeRadius = 16;
+  const endX = target.x - nx * nodeRadius;
+  const endY = target.y - ny * nodeRadius;
+  
+  // Контрольная точка перед концом - на линии source-target
+  // Это гарантирует правильную ориентацию стрелки
+  const ctrlDist = 30;
+  const ctrl2X = endX - nx * ctrlDist;
+  const ctrl2Y = endY - ny * ctrlDist;
+  
   if (direction === 'vertical') {
-    const midY = (source.y + target.y) / 2;
-    return `M${source.x},${source.y} C${source.x},${midY} ${target.x},${midY} ${target.x},${target.y}`;
+    const ctrl1Y = source.y + ny * ctrlDist;
+    return `M${source.x},${source.y} C${source.x},${ctrl1Y} ${ctrl2X},${ctrl2Y} ${endX},${endY}`;
   } else {
-    const midX = (source.x + target.x) / 2;
-    return `M${source.x},${source.y} C${midX},${source.y} ${midX},${target.y} ${target.x},${target.y}`;
+    const ctrl1X = source.x + nx * ctrlDist;
+    return `M${source.x},${source.y} C${ctrl1X},${source.y} ${ctrl2X},${ctrl2Y} ${endX},${endY}`;
   }
 };
 

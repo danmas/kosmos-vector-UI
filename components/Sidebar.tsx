@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppView } from '../types';
 
 interface SidebarProps {
   currentView: AppView;
   onChangeView: (view: AppView) => void;
   onOpenLogsDialog: () => void;
+  onOpenLogsWindow: () => void;
   onOpenPromptsEditor?: () => void;
   onOpenSettings?: () => void; // Новый проп для открытия настроек
   contextCode: string;
@@ -19,6 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentView, 
   onChangeView, 
   onOpenLogsDialog,
+  onOpenLogsWindow,
   onOpenPromptsEditor,
   onOpenSettings, // Новый проп
   contextCode, 
@@ -28,6 +30,25 @@ const Sidebar: React.FC<SidebarProps> = ({
   onRefreshCache,
   isPrefetching = false
 }) => {
+  const [isLogsMenuOpen, setIsLogsMenuOpen] = useState(false);
+  const logsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Закрыть меню при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (logsMenuRef.current && !logsMenuRef.current.contains(event.target as Node)) {
+        setIsLogsMenuOpen(false);
+      }
+    };
+    
+    if (isLogsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isLogsMenuOpen]);
+
   const handleAddContextCode = () => {
     const newCode = prompt('Введите имя нового Context Code:');
     if (newCode && newCode.trim()) {
@@ -118,13 +139,43 @@ const Sidebar: React.FC<SidebarProps> = ({
         </ul>
         
         <div className="mt-2 pt-2 border-t border-slate-800 space-y-1">
-             <button
-                onClick={onOpenLogsDialog}
-                className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors text-slate-500 hover:bg-slate-800 hover:text-slate-300"
-              >
-                <span className="text-sm">📟</span>
-                <span className="font-medium text-xs">Server Logs</span>
-              </button>
+             {/* Server Logs с dropdown меню */}
+             <div className="relative" ref={logsMenuRef}>
+               <button
+                  onClick={() => setIsLogsMenuOpen(!isLogsMenuOpen)}
+                  className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+                >
+                  <span className="text-sm">📟</span>
+                  <span className="font-medium text-xs">Server Logs</span>
+                  <span className="ml-auto text-[10px] text-slate-600">▼</span>
+                </button>
+                
+                {/* Dropdown menu */}
+                {isLogsMenuOpen && (
+                  <div className="absolute left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-md shadow-lg z-50 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        setIsLogsMenuOpen(false);
+                        onOpenLogsDialog();
+                      }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-2 text-slate-300 hover:bg-slate-700 transition-colors"
+                    >
+                      <span className="text-sm">📟</span>
+                      <span className="text-xs">Open in Dialog</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsLogsMenuOpen(false);
+                        onOpenLogsWindow();
+                      }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-2 text-slate-300 hover:bg-slate-700 transition-colors border-t border-slate-700"
+                    >
+                      <span className="text-sm">🌐</span>
+                      <span className="text-xs">Open in Browser Window</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               {onOpenPromptsEditor && (
                 <button
                   onClick={onOpenPromptsEditor}

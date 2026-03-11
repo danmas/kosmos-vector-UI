@@ -1,10 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import LogViewer from './LogViewer';
+import LogViewer, { LogViewerHandle } from './LogViewer';
 
 interface ServerLogsDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+// Получаем context-code из глобальной переменной
+const getContextCode = () => {
+  return (window as any).g_context_code || 'KOSMOS-VECTOR';
+};
 
 const STORAGE_KEY = 'serverLogsDialog_state';
 
@@ -15,8 +20,38 @@ const ServerLogsDialog: React.FC<ServerLogsDialogProps> = ({ isOpen, onClose }) 
   const [isResizing, setIsResizing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const logViewerRef = useRef<LogViewerHandle>(null);
   const startPosRef = useRef({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 });
+
+  // Очистка логов на сервере и в UI
+  const handleClearLogs = async () => {
+    if (!confirm('Clear all server logs?')) return;
+    
+    setIsClearing(true);
+    try {
+      const backendPort = import.meta.env.VITE_BACKEND_PORT || 3200;
+      const url = `http://localhost:${backendPort}/api/logs?context-code=${encodeURIComponent(getContextCode())}`;
+      const response = await fetch(url, { method: 'DELETE' });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`[Clear] ${result.message}. Deleted: ${result.deletedCount} logs`);
+      
+      // Очищаем логи в LogViewer
+      logViewerRef.current?.clearLogs();
+    } catch (err: any) {
+      console.error('Error clearing logs:', err);
+      alert('Failed to clear logs: ' + err.message);
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   // Load saved state from localStorage
   const loadSavedState = () => {
@@ -241,6 +276,18 @@ const ServerLogsDialog: React.FC<ServerLogsDialogProps> = ({ isOpen, onClose }) 
           </h2>
           <div className="flex gap-2" onMouseDown={(e) => e.stopPropagation()}>
             <button 
+              onClick={handleClearLogs}
+              disabled={isClearing}
+              className={`px-3 py-1 text-xs rounded border border-slate-700 ${
+                isClearing 
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                  : 'bg-red-900/30 text-red-400 border-red-900 hover:bg-red-900/50'
+              }`}
+              title="Clear all server logs"
+            >
+              {isClearing ? '...' : '🗑️ Clear'}
+            </button>
+            <button 
               onClick={() => setAutoScroll(!autoScroll)} 
               className={`px-3 py-1 text-xs rounded border border-slate-700 ${
                 autoScroll 
@@ -264,6 +311,7 @@ const ServerLogsDialog: React.FC<ServerLogsDialogProps> = ({ isOpen, onClose }) 
         {/* LogViewer content */}
         <div className="flex-1 overflow-hidden">
           <LogViewer 
+            ref={logViewerRef}
             autoScroll={autoScroll}
             onAutoScrollChange={setAutoScroll}
             showControls={false}

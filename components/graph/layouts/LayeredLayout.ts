@@ -393,20 +393,30 @@ export class LayeredLayout implements LayoutEngine {
         
         if (dist === 0) return '';
         
-        // Смещаем конец path к краю узла (14px = радиус узла)
+        // Нормализованный вектор направления
+        const nx = dx / dist;
+        const ny = dy / dist;
+        
+        // Смещаем конец path к краю узла
         const nodeRadius = 14;
-        const endX = target.x - (dx / dist) * nodeRadius;
-        const endY = target.y! - (dy / dist) * nodeRadius;
-
-        // Простая квадратичная Безье с одной контрольной точкой
+        const endX = target.x - nx * nodeRadius;
+        const endY = target.y! - ny * nodeRadius;
+        
+        // Контрольная точка перед концом - на линии source-target
+        // Это гарантирует что касательная в конце направлена к target
+        const ctrlDist = 30; // расстояние контрольной точки от конца
+        const ctrl2X = endX - nx * ctrlDist;
+        const ctrl2Y = endY - ny * ctrlDist;
+        
+        // Первая контрольная точка - выход из source
         if (isHorizontal) {
-          const midX = (source.x + endX) / 2;
-          return `M${source.x},${source.y} Q${midX},${source.y} ${midX},${(source.y! + endY) / 2} T${endX},${endY}`;
+          const ctrl1X = source.x + nx * ctrlDist;
+          const ctrl1Y = source.y!;
+          return `M${source.x},${source.y} C${ctrl1X},${ctrl1Y} ${ctrl2X},${ctrl2Y} ${endX},${endY}`;
         } else {
-          // Для вертикального - прямая линия с небольшим изгибом
-          const midY = (source.y! + endY) / 2;
-          // Контрольная точка смещена по X к source для первой половины, к target для второй
-          return `M${source.x},${source.y} C${source.x},${midY} ${endX},${midY} ${endX},${endY}`;
+          const ctrl1X = source.x;
+          const ctrl1Y = source.y! + ny * ctrlDist;
+          return `M${source.x},${source.y} C${ctrl1X},${ctrl1Y} ${ctrl2X},${ctrl2Y} ${endX},${endY}`;
         }
       });
   }
@@ -616,12 +626,19 @@ export class LayeredLayout implements LayoutEngine {
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist === 0) return '';
         
+        const nx = dx / dist;
+        const ny = dy / dist;
         const nodeRadius = 14;
-        const endX = target.x - (dx / dist) * nodeRadius;
-        const endY = target.y! - (dy / dist) * nodeRadius;
-        const midY = (source.y! + endY) / 2;
+        const endX = target.x - nx * nodeRadius;
+        const endY = target.y! - ny * nodeRadius;
         
-        return `M${source.x},${source.y} C${source.x},${midY} ${endX},${midY} ${endX},${endY}`;
+        // Контрольная точка на линии к target - гарантирует правильную ориентацию стрелки
+        const ctrlDist = 30;
+        const ctrl2X = endX - nx * ctrlDist;
+        const ctrl2Y = endY - ny * ctrlDist;
+        const ctrl1Y = source.y! + ny * ctrlDist;
+        
+        return `M${source.x},${source.y} C${source.x},${ctrl1Y} ${ctrl2X},${ctrl2Y} ${endX},${endY}`;
       });
 
     this.labelsGroup.selectAll<SVGTextElement, GraphLink>('text')

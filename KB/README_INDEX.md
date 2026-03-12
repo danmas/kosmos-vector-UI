@@ -43,6 +43,7 @@
 |------|----------|---------------|--------------|
 | [README_FILTERS.md](./README_FILTERS.md) | Система фильтрации и поиска | GraphFilterContext, фильтры по типам/тегам, синхронизация Inspector↔Graph | |
 | [README_Graph.md](./README_Graph.md) | Детали работы с графом зависимостей | Структура графа, типы связей, навигация | |
+| [README_NaturalQuery.md](./README_NaturalQuery.md) | Natural Query Engine — запросы на естественном языке | Генерация скриптов, Sandbox, SQL-анализ, Apply to Filter | 2026-03-12 |
 | [FILE_SELECTION_GUIDE.md](./FILE_SELECTION_GUIDE.md) | Руководство по выбору файлов для обработки | Glob-паттерны, маски включения/исключения, примеры | |
 
 ---
@@ -51,7 +52,7 @@
 
 | Файл | Описание | Ключевые темы | Актуализация |
 |------|----------|---------------|--------------|
-| [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление базы знаний | Навигация, правила ведения KB | 2026-02-08 |
+| [README_INDEX.md](./README_INDEX.md) | Этот файл — оглавление базы знаний | Навигация, правила ведения KB | 2026-03-12 |
 
 ---
 
@@ -66,7 +67,7 @@
 - **Запустить обработку кода**: [README_Processing.md](./README_Processing.md)
 - **Просмотреть результаты анализа**: [README_Data_Inspector.md](./README_Data_Inspector.md)
 - **Визуализировать граф**: [README_Graph_View.md](./README_Graph_View.md)
-- **Задавать вопросы о коде**: [README_RAG_Client.md](./README_RAG_Client.md)
+- **Задавать вопросы о коде**: [README_RAG_Client.md](./README_RAG_Client.md) или [README_NaturalQuery.md](./README_NaturalQuery.md) (через скрипты)
 - **Настроить фильтры**: [README_FILTERS.md](./README_FILTERS.md)
 
 ### По компонентам
@@ -76,6 +77,7 @@
 - **Data Inspector**: [README_Data_Inspector.md](./README_Data_Inspector.md) — детальный просмотр
 - **Graph View**: [README_Graph_View.md](./README_Graph_View.md) — граф зависимостей
 - **RAG Client**: [README_RAG_Client.md](./README_RAG_Client.md) — AI-ассистент
+- **Natural Query**: [README_NaturalQuery.md](./README_NaturalQuery.md) — интеллектуальный поиск
 
 ---
 
@@ -137,4 +139,5 @@
 ### Основной проект
 - **kosmos-vector** — backend-система с основным функционалом анализа кода
 
-**Последнее обновление:** 2026-02-15
+**Последнее обновление:** 2026-03-12
+

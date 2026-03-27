@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
-import { AiItemType, AiItem } from '../types';
+import { AiItemType, AiItem, GraphSnapshot, GraphSnapshotsStorage } from '../types';
 import { getGraphWithFallback, GraphData, apiClient } from '../services/apiClient';
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
 import { useDataCache } from '../lib/context/DataCacheContext';
@@ -126,6 +126,14 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
   const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
   const [hiddenLinkTypes, setHiddenLinkTypes] = useState<Set<string>>(new Set());
   const [showLegend, setShowLegend] = useState(false);
+
+  // === Graph Snapshots States ===
+  const [snapshots, setSnapshots] = useState<GraphSnapshot[]>([]);
+  const [showSnapshotDialog, setShowSnapshotDialog] = useState(false);
+  const [snapshotName, setSnapshotName] = useState('');
+  const [showSnapshotsList, setShowSnapshotsList] = useState(false);
+  const snapshotsListRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // === Layout Mode States ===
   const [layoutMode, setLayoutMode] = useState<GraphLayoutMode>('force');
@@ -640,6 +648,198 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
     setMultiSelectTooltip(null);
     setMultiSelectedNodeIds(new Set());
   };
+
+  // === GRAPH SNAPSHOTS FUNCTIONS (Server API) ===
+  const SNAPSHOTS_VERSION = 1;
+  const PREVIEW_NODES_COUNT = 5;
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+
+  // Загрузка снимков с сервера
+  const loadSnapshots = useCallback(async () => {
+    try {
+      setSnapshotsLoading(true);
+      const response = await apiClient.getGraphSnapshots();
+      if (response.success) {
+        setSnapshots(response.snapshots);
+      }
+    } catch (err) {
+      console.error('[KnowledgeGraph] Failed to load snapshots from server:', err);
+      // Fallback: пробуем localStorage
+      try {
+        const raw = localStorage.getItem(`graph_snapshots_${currentContextCode}`);
+        if (raw) {
+          const data: GraphSnapshotsStorage = JSON.parse(raw);
+          if (data.version === SNAPSHOTS_VERSION) {
+            setSnapshots(data.snapshots);
+          }
+        }
+      } catch (localErr) {
+        console.error('[KnowledgeGraph] Failed to load snapshots from localStorage:', localErr);
+      }
+    } finally {
+      setSnapshotsLoading(false);
+    }
+  }, [currentContextCode]);
+
+  // Загружаем снимки при изменении контекста
+  useEffect(() => {
+    loadSnapshots();
+  }, [currentContextCode, loadSnapshots]);
+
+  // Создание нового снимка (через API)
+  const createSnapshot = async (name: string) => {
+    const currentNodeIds = displayGraphData?.nodes.map(n => n.id) || [];
+    const currentLinkCount = displayGraphData?.links.length || 0;
+    
+    // Превью: первые N имён узлов (короткие имена)
+    const previewNodeNames = currentNodeIds
+      .slice(0, PREVIEW_NODES_COUNT)
+      .map(id => id.split('.').pop() || id);
+
+    try {
+      const response = await apiClient.createGraphSnapshot({
+        name: name.trim() || `Снимок ${new Date().toLocaleString('ru-RU')}`,
+        nodeIds: currentNodeIds,
+        selectedNodeIds: Array.from(multiSelectedNodeIds),
+        focusedNodeIds: Array.from(focusedNodeIds),
+        hiddenLinkTypes: Array.from(hiddenLinkTypes),
+        linkCount: currentLinkCount,
+        previewNodeNames
+      });
+
+      if (response.success) {
+        // Добавляем в начало списка
+        setSnapshots(prev => [response.snapshot, ...prev]);
+        console.log(`[KnowledgeGraph] Снимок создан на сервере: "${response.snapshot.name}" (${response.snapshot.nodeCount} узлов)`);
+        return response.snapshot;
+      }
+    } catch (err) {
+      console.error('[KnowledgeGraph] Ошибка создания снимка:', err);
+      alert('Ошибка сохранения снимка на сервере');
+    }
+    return null;
+  };
+
+  // Загрузка снимка (восстановление состояния)
+  const loadSnapshot = (snapshot: GraphSnapshot) => {
+    // Восстанавливаем узлы
+    setFilteredItemIds(new Set(snapshot.nodeIds));
+    setFocusedNodeIds(new Set(snapshot.focusedNodeIds));
+    setMultiSelectedNodeIds(new Set(snapshot.selectedNodeIds));
+    setHiddenLinkTypes(new Set(snapshot.hiddenLinkTypes));
+    
+    // Показываем multi-select tooltip если были выделенные узлы
+    if (snapshot.selectedNodeIds.length > 0) {
+      setMultiSelectTooltip({ x: 100, y: 100 });
+    } else {
+      setMultiSelectTooltip(null);
+    }
+    
+    // Закрываем тултипы
+    setTooltip(null);
+    setLastTooltipHighlightedNodeId(null);
+    setShowSnapshotsList(false);
+    
+    console.log(`[KnowledgeGraph] Снимок загружен: "${snapshot.name}" (${snapshot.nodeCount} узлов)`);
+  };
+
+  // Удаление снимка (через API)
+  const deleteSnapshot = async (snapshotId: string) => {
+    try {
+      const response = await apiClient.deleteGraphSnapshot(snapshotId);
+      if (response.success) {
+        setSnapshots(prev => prev.filter(s => s.id !== snapshotId));
+        console.log(`[KnowledgeGraph] Снимок удалён: ${snapshotId}`);
+      }
+    } catch (err) {
+      console.error('[KnowledgeGraph] Ошибка удаления снимка:', err);
+      alert('Ошибка удаления снимка');
+    }
+  };
+
+  // Обработчик сохранения снимка из диалога
+  const handleSaveSnapshot = async () => {
+    if (displayGraphData && displayGraphData.nodes.length > 0) {
+      await createSnapshot(snapshotName);
+      setShowSnapshotDialog(false);
+      setSnapshotName('');
+    }
+  };
+
+  // Экспорт снимков через сервер API
+  const exportSnapshots = async () => {
+    try {
+      const response = await apiClient.exportGraphSnapshots();
+      if (response.success) {
+        const json = JSON.stringify(response, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `graph_snapshots_${currentContextCode}_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log(`[KnowledgeGraph] Экспортировано ${response.snapshots.length} снимков`);
+      }
+    } catch (err) {
+      console.error('[KnowledgeGraph] Ошибка экспорта:', err);
+      alert('Ошибка экспорта снимков');
+    }
+  };
+
+  // Импорт снимков через сервер API
+  const importSnapshots = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+        
+        // Проверяем формат
+        if (!data.version || !Array.isArray(data.snapshots)) {
+          alert('Неверный формат файла');
+          return;
+        }
+
+        const response = await apiClient.importGraphSnapshots({
+          version: data.version,
+          snapshots: data.snapshots
+        });
+
+        if (response.success) {
+          // Перезагружаем список с сервера
+          await loadSnapshots();
+          alert(response.message || `Импортировано: ${response.imported} новых, ${response.skipped} пропущено`);
+          console.log(`[KnowledgeGraph] Импортировано ${response.imported} снимков`);
+        }
+      } catch (err) {
+        console.error('[KnowledgeGraph] Ошибка импорта:', err);
+        alert('Ошибка импорта снимков');
+      }
+    };
+    reader.readAsText(file);
+    
+    // Сбрасываем input для повторного выбора того же файла
+    event.target.value = '';
+  };
+
+  // Закрытие списка снимков при клике вне
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (snapshotsListRef.current && !snapshotsListRef.current.contains(event.target as Node)) {
+        setShowSnapshotsList(false);
+      }
+    };
+    if (showSnapshotsList) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showSnapshotsList]);
 
   // === ОБРАБОТЧИКИ СОБЫТИЙ УЗЛОВ (для инкрементального обновления) ===
 
@@ -1646,6 +1846,118 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
             Filter
           </button>
 
+          {/* === GRAPH SNAPSHOTS BUTTONS === */}
+          <div className="flex items-center gap-1 border-l border-slate-600 pl-2 ml-1">
+            {/* Save Snapshot Button */}
+            <button
+              onClick={() => {
+                if (displayGraphData && displayGraphData.nodes.length > 0) {
+                  setShowSnapshotDialog(true);
+                }
+              }}
+              disabled={!displayGraphData || displayGraphData.nodes.length === 0}
+              className="px-2 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-[10px] rounded transition-colors font-bold flex items-center gap-1"
+              title="Сохранить текущий вид графа"
+            >
+              💾
+            </button>
+
+            {/* Load Snapshot Dropdown */}
+            <div className="relative" ref={snapshotsListRef}>
+              <button
+                onClick={() => setShowSnapshotsList(!showSnapshotsList)}
+                className="px-2 py-1 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] rounded transition-colors font-bold flex items-center gap-1"
+                title="Загрузить сохранённый вид"
+              >
+                📂
+                {snapshots.length > 0 && (
+                  <span className="bg-cyan-900 px-1 rounded text-[9px]">{snapshots.length}</span>
+                )}
+              </button>
+
+              {/* Dropdown List with Preview */}
+              {showSnapshotsList && (
+                <div className="absolute top-full left-0 mt-1 w-80 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 max-h-96 overflow-hidden flex flex-col">
+                  {/* Header with Export/Import */}
+                  <div className="p-2 border-b border-slate-700 flex items-center justify-between bg-slate-800/95 shrink-0">
+                    <span className="text-xs font-bold text-slate-300">Снимки графа</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={exportSnapshots}
+                        disabled={snapshots.length === 0}
+                        className="text-[9px] px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded font-bold"
+                        title="Экспорт в JSON"
+                      >
+                        ⬇ Export
+                      </button>
+                      <label
+                        className="text-[9px] px-1.5 py-0.5 bg-violet-700 hover:bg-violet-600 text-white rounded font-bold cursor-pointer"
+                        title="Импорт из JSON"
+                      >
+                        ⬆ Import
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".json"
+                          onChange={importSnapshots}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Snapshots List */}
+                  <div className="overflow-y-auto flex-1">
+                    {snapshots.length === 0 ? (
+                      <div className="p-4 text-xs text-slate-500 italic text-center">
+                        Нет сохранённых снимков
+                      </div>
+                    ) : (
+                      snapshots.map((snap) => (
+                        <div
+                          key={snap.id}
+                          className="p-2 hover:bg-slate-700/50 border-b border-slate-700/50 last:border-b-0 group"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <button
+                              onClick={() => loadSnapshot(snap)}
+                              className="flex-1 text-left"
+                            >
+                              <div className="text-xs text-white font-medium truncate" title={snap.name}>{snap.name}</div>
+                              <div className="text-[10px] text-slate-400 flex gap-2 mt-0.5">
+                                <span>🔘 {snap.nodeCount}</span>
+                                <span>🔗 {snap.linkCount}</span>
+                                {snap.selectedNodeIds.length > 0 && (
+                                  <span className="text-green-400">✓ {snap.selectedNodeIds.length}</span>
+                                )}
+                              </div>
+                              {/* Preview nodes */}
+                              {snap.previewNodeNames && snap.previewNodeNames.length > 0 && (
+                                <div className="text-[9px] text-slate-500 mt-1 font-mono truncate" title={snap.previewNodeNames.join(', ')}>
+                                  {snap.previewNodeNames.join(', ')}{snap.nodeCount > snap.previewNodeNames.length ? '...' : ''}
+                                </div>
+                              )}
+                              <div className="text-[9px] text-slate-600 mt-0.5">
+                                {new Date(snap.createdAt).toLocaleString('ru-RU')}
+                              </div>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteSnapshot(snap.id); }}
+                              className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-xs"
+                              title="Удалить снимок"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Layout Mode Switcher */}
           <LayoutSwitcher
             mode={layoutMode}
@@ -2111,6 +2423,67 @@ const KnowledgeGraph: React.FC<KnowledgeGraphProps> = () => {
         }}
         itemId={modalNodeId || ''}
       />
+
+      {/* Save Snapshot Dialog */}
+      {showSnapshotDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowSnapshotDialog(false)}>
+          <div
+            className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl w-96 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-bold text-white mb-3">💾 Сохранить снимок графа</h3>
+            
+            <div className="mb-4">
+              <label className="block text-xs text-slate-400 mb-1">Название снимка:</label>
+              <input
+                type="text"
+                value={snapshotName}
+                onChange={(e) => setSnapshotName(e.target.value)}
+                placeholder={`Снимок ${new Date().toLocaleString('ru-RU')}`}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveSnapshot();
+                  if (e.key === 'Escape') setShowSnapshotDialog(false);
+                }}
+              />
+            </div>
+
+            <div className="text-xs text-slate-400 mb-4 p-2 bg-slate-900/50 rounded">
+              <div>🔘 Узлов на графе: <span className="text-white font-mono">{displayGraphData?.nodes.length || 0}</span></div>
+              <div>🔗 Связей: <span className="text-white font-mono">{displayGraphData?.links.length || 0}</span></div>
+              {multiSelectedNodeIds.size > 0 && (
+                <div className="text-green-400">✓ Выделено: <span className="font-mono">{multiSelectedNodeIds.size}</span></div>
+              )}
+              {focusedNodeIds.size > 0 && (
+                <div className="text-blue-400">⚫ Фокус: <span className="font-mono">{focusedNodeIds.size}</span></div>
+              )}
+              {/* Превью узлов */}
+              {displayGraphData && displayGraphData.nodes.length > 0 && (
+                <div className="mt-2 text-[10px] text-slate-500 font-mono truncate">
+                  {displayGraphData.nodes.slice(0, 5).map(n => n.id.split('.').pop()).join(', ')}
+                  {displayGraphData.nodes.length > 5 ? '...' : ''}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowSnapshotDialog(false)}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSaveSnapshot}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded font-bold"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -759,3 +759,89 @@ export interface AskResponse {
   response: string;
   timestamp: string;
 }
+
+// ────────────────────────────────────── Graph Snapshot Types (Graph View)
+
+/** Снимок состояния графа для сохранения/восстановления */
+export interface GraphSnapshot {
+  id: string;                    // Уникальный ID (uuid или timestamp)
+  name: string;                  // Название/описание снимка
+  createdAt: string;             // ISO 8601 дата создания
+  contextCode: string;           // Код контекста БЗ
+  
+  // Данные графа
+  nodeIds: string[];             // ID узлов на графе
+  selectedNodeIds: string[];     // ID выделенных узлов (обведённых)
+  focusedNodeIds: string[];      // ID фокусных узлов
+  hiddenLinkTypes: string[];     // Скрытые типы связей
+  
+  // Метаданные для превью
+  nodeCount: number;             // Количество узлов
+  linkCount: number;             // Количество связей
+  previewNodeNames: string[];    // Первые N имён узлов для превью
+}
+
+export interface GraphSnapshotsStorage {
+  version: number;
+  snapshots: GraphSnapshot[];
+}
+
+// ────────────────────────────────────── Graph Snapshot API Types
+
+/** Запрос на создание снимка */
+export interface GraphSnapshotCreateRequest {
+  name: string;
+  nodeIds: string[];
+  selectedNodeIds?: string[];
+  focusedNodeIds?: string[];
+  hiddenLinkTypes?: string[];
+  linkCount?: number;
+  previewNodeNames?: string[];
+}
+
+/** Запрос на обновление снимка */
+export interface GraphSnapshotUpdateRequest {
+  name?: string;
+}
+
+/** Ответ со списком снимков */
+export interface GraphSnapshotListResponse {
+  success: boolean;
+  snapshots: GraphSnapshot[];
+}
+
+/** Ответ с одним снимком */
+export interface GraphSnapshotResponse {
+  success: boolean;
+  snapshot: GraphSnapshot;
+}
+
+/** Ответ на удаление */
+export interface GraphSnapshotDeleteResponse {
+  success: boolean;
+  message: string;
+}
+
+/** Ответ на экспорт снимков */
+export interface GraphSnapshotsExportResponse {
+  success: boolean;
+  version: number;
+  snapshots: GraphSnapshot[];
+  exportedAt: string;
+  contextCode?: string;
+}
+
+/** Запрос на импорт снимков */
+export interface GraphSnapshotsImportRequest {
+  version: number;
+  snapshots: GraphSnapshot[];
+}
+
+/** Ответ на импорт снимков */
+export interface GraphSnapshotsImportResponse {
+  success: boolean;
+  imported: number;
+  skipped: number;
+  total: number;
+  message?: string;
+}

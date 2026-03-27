@@ -996,6 +996,83 @@ export class ApiClient {
     );
   }
 
+  // ─────────────────── Graph Snapshots API ───────────────────
+
+  /**
+   * GET /api/graph-snapshots - Получить список всех снимков графа
+   */
+  async getGraphSnapshots(): Promise<import('../types').GraphSnapshotListResponse> {
+    return this.request<import('../types').GraphSnapshotListResponse>('/api/graph-snapshots');
+  }
+
+  /**
+   * POST /api/graph-snapshots - Создать новый снимок графа
+   */
+  async createGraphSnapshot(
+    data: import('../types').GraphSnapshotCreateRequest
+  ): Promise<import('../types').GraphSnapshotResponse> {
+    return this.request<import('../types').GraphSnapshotResponse>('/api/graph-snapshots', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * GET /api/graph-snapshots/:id - Получить снимок по ID
+   */
+  async getGraphSnapshot(snapshotId: string): Promise<import('../types').GraphSnapshotResponse> {
+    return this.request<import('../types').GraphSnapshotResponse>(
+      `/api/graph-snapshots/${encodeURIComponent(snapshotId)}`
+    );
+  }
+
+  /**
+   * PATCH /api/graph-snapshots/:id - Обновить снимок (название)
+   */
+  async updateGraphSnapshot(
+    snapshotId: string,
+    data: import('../types').GraphSnapshotUpdateRequest
+  ): Promise<import('../types').GraphSnapshotResponse> {
+    return this.request<import('../types').GraphSnapshotResponse>(
+      `/api/graph-snapshots/${encodeURIComponent(snapshotId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  /**
+   * DELETE /api/graph-snapshots/:id - Удалить снимок
+   */
+  async deleteGraphSnapshot(snapshotId: string): Promise<import('../types').GraphSnapshotDeleteResponse> {
+    return this.request<import('../types').GraphSnapshotDeleteResponse>(
+      `/api/graph-snapshots/${encodeURIComponent(snapshotId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  }
+
+  /**
+   * GET /api/graph-snapshots/export - Экспорт всех снимков
+   */
+  async exportGraphSnapshots(): Promise<import('../types').GraphSnapshotsExportResponse> {
+    return this.request<import('../types').GraphSnapshotsExportResponse>('/api/graph-snapshots/export');
+  }
+
+  /**
+   * POST /api/graph-snapshots/import - Импорт снимков
+   */
+  async importGraphSnapshots(
+    data: import('../types').GraphSnapshotsImportRequest
+  ): Promise<import('../types').GraphSnapshotsImportResponse> {
+    return this.request<import('../types').GraphSnapshotsImportResponse>('/api/graph-snapshots/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
 }
 
 // Create default API client instance (uses VITE_BACKEND_PORT from .env when set)

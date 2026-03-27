@@ -1,0 +1,183 @@
+# API маршруты: Graph Snapshots - снимки состояния графа
+# Все маршруты требуют query-параметр context-code
+---
+/api/graph-snapshots:
+  get:
+    summary: Получить список всех снимков графа
+    description: |
+      Возвращает список всех сохранённых снимков графа для указанного контекста.
+      Снимки отсортированы по дате создания (новые первые).
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+    responses:
+      '200':
+        description: Список снимков
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotListResponse'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+  post:
+    summary: Создать новый снимок графа
+    description: |
+      Создаёт новый снимок текущего состояния графа.
+      Снимок содержит список узлов, выделенные узлы, фокусные узлы и скрытые типы связей.
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GraphSnapshotCreateRequest'
+    responses:
+      '201':
+        description: Снимок успешно создан
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotResponse'
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/graph-snapshots/{snapshotId}:
+  get:
+    summary: Получить снимок по ID
+    description: Возвращает полные данные одного снимка
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID снимка
+        example: snap_1711234567890_abc123xyz
+    responses:
+      '200':
+        description: Данные снимка
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotResponse'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+  patch:
+    summary: Обновить снимок
+    description: Обновляет название снимка
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID снимка
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GraphSnapshotUpdateRequest'
+    responses:
+      '200':
+        description: Снимок обновлён
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotResponse'
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+  delete:
+    summary: Удалить снимок
+    description: Удаляет снимок по ID
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID снимка
+    responses:
+      '200':
+        description: Снимок удалён
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotDeleteResponse'
+      '404':
+        $ref: '#/components/responses/NotFound'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/graph-snapshots/export:
+  get:
+    summary: Экспортировать все снимки
+    description: |
+      Возвращает все снимки для текущего контекста в формате JSON для экспорта.
+      Клиент может сохранить этот JSON в файл.
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+    responses:
+      '200':
+        description: Данные для экспорта
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotsExportResponse'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/graph-snapshots/import:
+  post:
+    summary: Импортировать снимки
+    description: |
+      Импортирует снимки из JSON. 
+      Дубликаты по ID пропускаются (не перезаписываются).
+      Снимки привязываются к текущему контексту (context-code).
+    tags:
+      - Graph Snapshots
+    parameters:
+      - $ref: '#/components/parameters/ContextCodeQuery'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GraphSnapshotsImportRequest'
+    responses:
+      '200':
+        description: Результат импорта
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSnapshotsImportResponse'
+      '400':
+        $ref: '#/components/responses/BadRequest'
+      '500':
+        $ref: '#/components/responses/InternalServerError'

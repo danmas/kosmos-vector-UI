@@ -1,0 +1,271 @@
+# Схемы: GraphSnapshot - снимки состояния графа для сохранения/восстановления
+---
+GraphSnapshot:
+  type: object
+  description: Снимок состояния графа для сохранения и восстановления
+  required:
+    - id
+    - name
+    - createdAt
+    - contextCode
+    - nodeIds
+    - selectedNodeIds
+    - focusedNodeIds
+    - hiddenLinkTypes
+    - nodeCount
+    - linkCount
+    - previewNodeNames
+  properties:
+    id:
+      type: string
+      description: Уникальный идентификатор снимка
+      example: snap_1711234567890_abc123xyz
+    name:
+      type: string
+      description: Название/описание снимка
+      example: "Анализ модуля авторизации"
+    createdAt:
+      type: string
+      format: date-time
+      description: Дата и время создания снимка (ISO 8601)
+      example: "2024-03-23T14:30:00.000Z"
+    contextCode:
+      type: string
+      description: Код контекста базы знаний
+      example: CARL
+    nodeIds:
+      type: array
+      items:
+        type: string
+      description: Массив ID узлов, отображённых на графе
+      example:
+        - "auth.login"
+        - "auth.validateToken"
+        - "db.users.findById"
+    selectedNodeIds:
+      type: array
+      items:
+        type: string
+      description: Массив ID выделенных узлов (обведённых кружком)
+      example:
+        - "auth.login"
+    focusedNodeIds:
+      type: array
+      items:
+        type: string
+      description: Массив ID фокусных узлов
+      example:
+        - "auth.validateToken"
+    hiddenLinkTypes:
+      type: array
+      items:
+        type: string
+      description: Массив скрытых типов связей
+      example:
+        - "imports"
+    nodeCount:
+      type: integer
+      minimum: 0
+      description: Количество узлов в снимке
+      example: 15
+    linkCount:
+      type: integer
+      minimum: 0
+      description: Количество связей в снимке
+      example: 23
+    previewNodeNames:
+      type: array
+      items:
+        type: string
+      description: Первые N имён узлов для превью (короткие имена)
+      example:
+        - "login"
+        - "validateToken"
+        - "findById"
+
+GraphSnapshotCreateRequest:
+  type: object
+  description: Запрос на создание нового снимка графа
+  required:
+    - name
+    - nodeIds
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: Название снимка
+      example: "Анализ модуля авторизации"
+    nodeIds:
+      type: array
+      items:
+        type: string
+      minItems: 1
+      description: Массив ID узлов на графе
+    selectedNodeIds:
+      type: array
+      items:
+        type: string
+      description: Массив ID выделенных узлов
+      default: []
+    focusedNodeIds:
+      type: array
+      items:
+        type: string
+      description: Массив ID фокусных узлов
+      default: []
+    hiddenLinkTypes:
+      type: array
+      items:
+        type: string
+      description: Массив скрытых типов связей
+      default: []
+    linkCount:
+      type: integer
+      minimum: 0
+      description: Количество связей (опционально, для метаданных)
+      default: 0
+    previewNodeNames:
+      type: array
+      items:
+        type: string
+      description: Превью имён узлов
+      default: []
+
+GraphSnapshotUpdateRequest:
+  type: object
+  description: Запрос на обновление снимка (только название)
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: Новое название снимка
+  minProperties: 1
+
+GraphSnapshotListResponse:
+  type: object
+  description: Ответ со списком всех снимков для контекста
+  required:
+    - success
+    - snapshots
+  properties:
+    success:
+      type: boolean
+      enum:
+        - true
+    snapshots:
+      type: array
+      items:
+        $ref: '#/components/schemas/GraphSnapshot'
+      description: Список снимков, отсортированных по дате создания (новые первые)
+
+GraphSnapshotResponse:
+  type: object
+  description: Ответ с одним снимком
+  required:
+    - success
+    - snapshot
+  properties:
+    success:
+      type: boolean
+      enum:
+        - true
+    snapshot:
+      $ref: '#/components/schemas/GraphSnapshot'
+
+GraphSnapshotDeleteResponse:
+  type: object
+  description: Ответ на удаление снимка
+  required:
+    - success
+    - message
+  properties:
+    success:
+      type: boolean
+      enum:
+        - true
+    message:
+      type: string
+      description: Сообщение об успешном удалении
+      example: "Снимок успешно удалён"
+
+GraphSnapshotsExportResponse:
+  type: object
+  description: Ответ с экспортом всех снимков
+  required:
+    - success
+    - version
+    - snapshots
+    - exportedAt
+  properties:
+    success:
+      type: boolean
+      enum:
+        - true
+    version:
+      type: integer
+      description: Версия формата экспорта
+      example: 1
+    snapshots:
+      type: array
+      items:
+        $ref: '#/components/schemas/GraphSnapshot'
+    exportedAt:
+      type: string
+      format: date-time
+      description: Дата и время экспорта
+    contextCode:
+      type: string
+      description: Код контекста
+
+GraphSnapshotsImportRequest:
+  type: object
+  description: Запрос на импорт снимков
+  required:
+    - version
+    - snapshots
+  properties:
+    version:
+      type: integer
+      description: Версия формата импорта
+      example: 1
+    snapshots:
+      type: array
+      items:
+        $ref: '#/components/schemas/GraphSnapshot'
+      minItems: 1
+      description: Массив снимков для импорта
+
+GraphSnapshotsImportResponse:
+  type: object
+  description: Ответ на импорт снимков
+  required:
+    - success
+    - imported
+    - skipped
+    - total
+  properties:
+    success:
+      type: boolean
+      enum:
+        - true
+    imported:
+      type: integer
+      minimum: 0
+      description: Количество успешно импортированных снимков
+      example: 5
+    skipped:
+      type: integer
+      minimum: 0
+      description: Количество пропущенных снимков (дубликаты)
+      example: 2
+    total:
+      type: integer
+      minimum: 0
+      description: Общее количество снимков в запросе
+      example: 7
+    message:
+      type: string
+      description: Сообщение о результате импорта
+      example: "Импортировано 5 снимков, пропущено 2 дубликата"

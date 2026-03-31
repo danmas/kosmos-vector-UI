@@ -56,6 +56,47 @@ const Inspector: React.FC<InspectorProps> = () => {
   // Ref для отслеживания контекста, с которым был выбран элемент
   const selectedIdContextRef = useRef<string | null>(null);
 
+  // Функция объединения фильтров (для Add to Filter)
+  const mergeFilters = (newFilter: string) => {
+    const current = inspectorSearch.trim();
+    
+    // Если текущий фильтр пуст - просто применяем новый
+    if (!current) {
+      setInspectorSearch(newFilter);
+      return;
+    }
+
+    // Парсим regex-фильтры вида /^(?:item1|item2)$/i
+    const currentMatch = current.match(/^\/\^\(\?:(.+)\)\$\/i$/);
+    const newMatch = newFilter.match(/^\/\^\(\?:(.+)\)\$\/i$/);
+
+    if (currentMatch && newMatch) {
+      // Объединяем два regex
+      const currentItems = currentMatch[1].split('|');
+      const newItems = newMatch[1].split('|');
+      const allItems = Array.from(new Set([...currentItems, ...newItems]));
+      
+      // Ограничение длины regex
+      const MAX_REGEX_LENGTH = 4000;
+      let includedItems: string[] = [];
+      let length = 10;
+      for (const item of allItems) {
+        if (length + item.length + 1 < MAX_REGEX_LENGTH) {
+          includedItems.push(item);
+          length += item.length + 1;
+        } else {
+          break;
+        }
+      }
+      
+      const merged = `/^(?:${includedItems.join('|')})$/i`;
+      setInspectorSearch(merged);
+    } else {
+      // Если форматы не совпадают - просто заменяем
+      setInspectorSearch(newFilter);
+    }
+  };
+
   const { typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths, setIsFilterDialogOpen } = useGraphFilter();
 
 
@@ -767,6 +808,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
         onApplyResult={(res) => setInspectorSearch(res)}
+        onAddToResult={mergeFilters}
       />
       <TagsDialog
         isOpen={isTagsDialogOpen && !!selectedId}

@@ -188,71 +188,14 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Проверка доступности сервера и endpoints при старте
+  // Проверка доступности сервера при старте (только health check, без лишних fetch-запросов)
   useEffect(() => {
-    const checkServerEndpoints = async () => {
+    const checkServer = async () => {
       console.log('🔍 [Startup] Checking backend server availability...');
 
       try {
-        // 1. Проверка health endpoint
         const health = await apiClient.healthCheck();
         console.log('✅ [Startup] Health check passed:', health);
-
-        // 2. Проверка наличия необходимых endpoints
-        const requiredEndpoints = [
-          { path: '/api/kb-config', method: 'GET', name: 'KB Config' },
-          { path: '/api/items-list', method: 'GET', name: 'Items List' }
-        ];
-
-        const endpointChecks = await Promise.allSettled(
-          requiredEndpoints.map(async (endpoint) => {
-            try {
-              const response = await fetch(endpoint.path, { method: endpoint.method });
-              // Endpoint считается доступным если:
-              // - 200 OK - endpoint работает
-              // - 400 Bad Request - endpoint существует, но не хватает параметров
-              // - 404 Not Found - endpoint не существует (недоступен)
-              const isAvailable = response.ok || response.status === 400;
-              return { ...endpoint, available: isAvailable, status: response.status };
-            } catch (err) {
-              // Network errors означают, что сервер недоступен
-              const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
-              return {
-                ...endpoint,
-                available: false,
-                status: isNetworkError ? 'NETWORK_ERROR' : 'UNKNOWN',
-                error: err instanceof Error ? err.message : 'Unknown error'
-              };
-            }
-          })
-        );
-
-        // Логируем результаты проверки
-        endpointChecks.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            const endpoint = result.value;
-            if (endpoint.available) {
-              console.log(`✅ [Startup] ${endpoint.name} (${endpoint.path}) - Available (status: ${endpoint.status})`);
-            } else {
-              console.warn(`⚠️ [Startup] ${endpoint.name} (${endpoint.path}) - Not available (status: ${endpoint.status}${endpoint.error ? `, error: ${endpoint.error}` : ''})`);
-            }
-          } else {
-            console.error(`❌ [Startup] ${requiredEndpoints[index].name} (${requiredEndpoints[index].path}) - Check failed:`, result.reason);
-          }
-        });
-
-        // 3. Проверка /api/project/tree отдельно (требует rootPath)
-        try {
-          // Пробуем получить rootPath из KB config для проверки
-          const kbConfig = await getKbConfigWithFallback();
-          const testRootPath = kbConfig.data.rootPath || kbConfig.data.targetPath || './';
-          const testResponse = await fetch(`/api/project/tree?rootPath=${encodeURIComponent(testRootPath)}&depth=1`);
-          const projectTreeAvailable = testResponse.ok || testResponse.status === 400; // 400 может быть из-за невалидного пути, но endpoint существует
-          console.log(`${projectTreeAvailable ? '✅' : '⚠️'} [Startup] Project Tree (/api/project/tree) - ${projectTreeAvailable ? 'Available' : 'Not available'} (status: ${testResponse.status})`);
-        } catch (err) {
-          console.warn(`⚠️ [Startup] Project Tree (/api/project/tree) - Check failed:`, err instanceof Error ? err.message : err);
-        }
-
         console.log('✅ [Startup] Backend server check completed');
       } catch (err) {
         console.error('❌ [Startup] Backend server health check failed:', err);
@@ -260,7 +203,7 @@ const AppContent: React.FC = () => {
       }
     };
 
-    checkServerEndpoints();
+    checkServer();
   }, []);
 
   // Fetch default file structure on mount

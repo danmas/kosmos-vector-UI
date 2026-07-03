@@ -390,16 +390,24 @@ function validateProjectTreeResponse(data: any, statusCode: number): ValidationR
         }
       }
 
-      // Проверяем тип
+      // Проверяем тип: допускаем "file"/"directory", а также "folder" и "root" (предупреждение)
       if (file.type && !['file', 'directory'].includes(file.type)) {
-        validation.errors.push('ProjectFile type must be "file" or "directory"');
-        validation.valid = false;
+        if (file.type === 'folder' || file.type === 'root') {
+          validation.warnings.push(`ProjectFile type is "${file.type}", expected "directory"`);
+        } else {
+          validation.errors.push(`ProjectFile type must be "file" or "directory", got "${file.type}"`);
+          validation.valid = false;
+        }
       }
 
-      // Проверяем path начинается с ./
-      if (file.path && !file.path.startsWith('./')) {
-        validation.errors.push('ProjectFile path must start with "./"');
-        validation.valid = false;
+      // Проверяем path: допускаем относительные (./) и абсолютные пути (Windows/Unix)
+      if (file.path && typeof file.path === 'string') {
+        const isRelative = file.path.startsWith('./');
+        const isAbsoluteWindows = /^[a-zA-Z]:[\\/]/.test(file.path);
+        const isAbsoluteUnix = file.path.startsWith('/');
+        if (!isRelative && !isAbsoluteWindows && !isAbsoluteUnix) {
+          validation.warnings.push(`ProjectFile path "${file.path}" is neither relative (./) nor absolute`);
+        }
       }
 
       // Проверяем size - число
@@ -482,13 +490,16 @@ function validateProjectSelectionResponse(data: any, statusCode: number): Valida
           validation.errors.push('KB config fileSelection must be an array');
           validation.valid = false;
         } else {
-          // Проверяем что все пути начинаются с ./
-          const invalidPaths = config.fileSelection.filter((path: any) =>
-            typeof path !== 'string' || !path.startsWith('./')
-          );
+          // Проверяем пути: допускаем относительные (./) и абсолютные
+          const invalidPaths = config.fileSelection.filter((path: any) => {
+            if (typeof path !== 'string') return true;
+            const isRelative = path.startsWith('./');
+            const isAbsoluteWindows = /^[a-zA-Z]:[\\/]/.test(path);
+            const isAbsoluteUnix = path.startsWith('/');
+            return !isRelative && !isAbsoluteWindows && !isAbsoluteUnix;
+          });
           if (invalidPaths.length > 0) {
-            validation.errors.push(`KB config fileSelection contains invalid paths (must start with './'): ${invalidPaths.join(', ')}`);
-            validation.valid = false;
+            validation.warnings.push(`KB config fileSelection contains unusual paths: ${invalidPaths.slice(0, 3).join(', ')}`);
           }
         }
       }

@@ -28,6 +28,16 @@ const Inspector: React.FC<InspectorProps> = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   const { getItemsList, setItemsList: setCachedItemsList, currentContextCode } = useDataCache();
+
+  // Refs для нестабильных функций контекста, чтобы не перезапускать загрузку при смене ссылок
+  const getItemsListRef = useRef(getItemsList);
+  const setCachedItemsListRef = useRef(setCachedItemsList);
+
+  useEffect(() => {
+    getItemsListRef.current = getItemsList;
+    setCachedItemsListRef.current = setCachedItemsList;
+  }, [getItemsList, setCachedItemsList]);
+
   const [itemsList, setItemsList] = useState<AiItemSummary[]>([]);
   const [fullItemData, setFullItemData] = useState<AiItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +57,7 @@ const Inspector: React.FC<InspectorProps> = () => {
   const [vectorizeProgress, setVectorizeProgress] = useState<{ processed: number; total: number } | null>(null);
   const [vectorizedItemIds, setVectorizedItemIds] = useState<Set<string>>(new Set());
   const [vectorizingItemId, setVectorizingItemId] = useState<string | null>(null);
+  const [pinnedItemIds, setPinnedItemIds] = useState<Set<string>>(new Set()); // Прямой фильтр от "Add to Filter"
 
   const VECTORIZE_BATCH_SIZE = 5;
 
@@ -97,6 +108,50 @@ const Inspector: React.FC<InspectorProps> = () => {
     }
   };
 
+  // Прямое добавление ID в фильтр. Автозагрузка элементов, если список пуст
+  const handleAddItems = async (ids: string[]) => {
+    // Если itemsList пуст — загружаем данные, чтобы было что фильтровать
+    if (itemsList.length === 0) {
+      console.log('[Inspector] handleAddItems: itemsList пуст, загружаем данные...');
+      try {
+        const cached = getItemsListRef.current();
+        if (cached && cached.data.length > 0) {
+          setItemsList(cached.data);
+          setVectorizedItemIds(new Set(cached.data.filter((i: AiItemSummary) => i.isVectorized).map((i: AiItemSummary) => i.id)));
+          setIsDemoMode(cached.isDemo);
+          setDataSource('cache');
+          setIsLoading(false);
+          console.log(`[Inspector] Загружено из кэша: ${cached.data.length} элементов`);
+        } else {
+          setIsLoading(true);
+          const result = await getItemsListWithFallback(currentContextCode || undefined);
+          setItemsList(result.data);
+          setCachedItemsListRef.current(result.data, result.isDemo);
+          setVectorizedItemIds(new Set(result.data.filter((i: AiItemSummary) => i.isVectorized).map((i: AiItemSummary) => i.id)));
+          setIsDemoMode(result.isDemo);
+          setDataSource('server');
+          setIsLoading(false);
+          console.log(`[Inspector] Загружено с сервера: ${result.data.length} элементов`);
+        }
+      } catch (err) {
+        console.error('[Inspector] Ошибка загрузки в handleAddItems:', err);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    setPinnedItemIds(prev => {
+      const merged = new Set([...prev, ...ids]);
+      console.log(`[Inspector] handleAddItems: +${ids.length} pinned, total: ${merged.size}`);
+      return merged;
+    });
+  };
+
+  // Отладка: отслеживаем изменение pinnedItemIds
+  useEffect(() => {
+    console.log('[Inspector] pinnedItemIds changed, size:', pinnedItemIds.size);
+  }, [pinnedItemIds]);
+
   const { typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths, setIsFilterDialogOpen } = useGraphFilter();
 
 
@@ -108,17 +163,19 @@ const Inspector: React.FC<InspectorProps> = () => {
 
   // Загрузка списка метаданных: сначала из кэша, затем с сервера
   useEffect(() => {
+    console.log(`[Inspector] context changed: ${currentContextCode}`);
     // Очищаем выбранный элемент и список при смене контекста
     setSelectedId(null);
     setFullItemData(null);
     setItemsList([]); // Важно: очищаем список, чтобы старые элементы не проходили проверку
     setVectorizedItemIds(new Set());
+    setPinnedItemIds(new Set()); // Сбрасываем прямой фильтр при смене контекста
     
     const loadItemsList = async () => {
       console.log(`[Inspector] loadItemsList запущен для контекста: ${currentContextCode}`);
 
       // Проверяем кэш
-      const cached = getItemsList();
+      const cached = getItemsListRef.current();
       if (cached) {
         console.log(`[Inspector] Данные загружены из кэша:`, {
           count: cached.data.length,
@@ -126,7 +183,7 @@ const Inspector: React.FC<InspectorProps> = () => {
           cacheAge: `${((Date.now() - cached.timestamp) / 1000).toFixed(1)}s`
         });
         setItemsList(cached.data);
-        setVectorizedItemIds(new Set(cached.data.filter((i: import('../types').AiItemSummary) => i.isVectorized).map((i: import('../types').AiItemSummary) => i.id)));
+        setVectorizedItemIds(new Set(cached.data.filter((i: AiItemSummary) => i.isVectorized).map((i: AiItemSummary) => i.id)));
         setIsDemoMode(cached.isDemo);
         setDataSource('cache');
         setIsLoading(false);
@@ -151,10 +208,10 @@ const Inspector: React.FC<InspectorProps> = () => {
         });
 
         // Сохраняем в кэш
-        setCachedItemsList(result.data, result.isDemo);
+        setCachedItemsListRef.current(result.data, result.isDemo);
 
         setItemsList(result.data);
-        setVectorizedItemIds(new Set(result.data.filter((i: import('../types').AiItemSummary) => i.isVectorized).map((i: import('../types').AiItemSummary) => i.id)));
+        setVectorizedItemIds(new Set(result.data.filter((i: AiItemSummary) => i.isVectorized).map((i: AiItemSummary) => i.id)));
         setIsDemoMode(result.isDemo);
         setDataSource('server');
         // Set first item as selected by default and load its full data
@@ -171,7 +228,7 @@ const Inspector: React.FC<InspectorProps> = () => {
     };
 
     loadItemsList();
-  }, [currentContextCode, getItemsList, setCachedItemsList]);
+  }, [currentContextCode]);
 
   // Функция загрузки тегов элемента
   const loadItemTags = async (itemId: string) => {
@@ -236,7 +293,7 @@ const Inspector: React.FC<InspectorProps> = () => {
           : item
       );
       // Обновляем кэш с актуальным списком
-      setCachedItemsList(updatedList, isDemoMode);
+      setCachedItemsListRef.current(updatedList, isDemoMode);
       return updatedList;
     });
   };
@@ -249,7 +306,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         return newTags !== undefined ? { ...item, tags: newTags } : item;
       });
       // Обновляем кэш один раз с полностью актуальным списком
-      setCachedItemsList(updatedList, isDemoMode);
+      setCachedItemsListRef.current(updatedList, isDemoMode);
       return updatedList;
     });
   };
@@ -391,9 +448,16 @@ const Inspector: React.FC<InspectorProps> = () => {
   }, [selectedId, itemsList, currentContextCode]);
   
 
-  // Мемоизируем filteredItems с поддержкой regex, типов, тегов и файлов
+  // Мемоизируем filteredItems с поддержкой regex, типов, тегов, файлов и закреплённых ID
   const filteredItems = useMemo(() => {
     let items = itemsList;
+  
+    // Прямой фильтр по закреплённым ID (от "Add to Filter")
+    if (pinnedItemIds.size > 0) {
+      const before = items.length;
+      items = items.filter(item => pinnedItemIds.has(item.id));
+      console.log(`[filteredItems] pinnedFilter: itemsList=${before}, pinned=${pinnedItemIds.size}, after=${items.length}`);
+    }
   
     // Фильтр по типам
     if (typeFilterEnabled && selectedTypes.size > 0) {
@@ -437,7 +501,7 @@ const Inspector: React.FC<InspectorProps> = () => {
     }
   
     return items;
-  }, [itemsList, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths]);
+  }, [itemsList, pinnedItemIds, inspectorSearch, typeFilterEnabled, selectedTypes, tagFilterEnabled, selectedTagCodes, fileFilterEnabled, selectedFilePaths]);
  
   // Публикация отфильтрованных ID в контекст для синхронизации с графом
   // Обновляем только при реальном изменении списка ID
@@ -590,6 +654,24 @@ const Inspector: React.FC<InspectorProps> = () => {
                 title={`Перевекторизовать все отфильтрованные (${filteredItems.length})`}
               >
                 V*
+              </button>
+              <button
+                onClick={() => {
+                  setItemsList([]);
+                  setSelectedId(null);
+                  setFullItemData(null);
+                  setInspectorSearch('');
+                  setFilteredItemIds(new Set());
+                  setPinnedItemIds(new Set());
+                  setVectorizedItemIds(new Set());
+                  setCachedItemsList([], isDemoMode);
+                  uiLogger.logMessage('INFO', 'Список объектов очищен');
+                }}
+                disabled={itemsList.length === 0}
+                className="bg-slate-600 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 shadow-lg shrink-0"
+                title="Очистить список объектов"
+              >
+                ✕
               </button>
             </div>
             {vectorizing && vectorizeProgress && (
@@ -808,7 +890,7 @@ const Inspector: React.FC<InspectorProps> = () => {
         isOpen={isQueryDialogOpen}
         onClose={() => setIsQueryDialogOpen(false)}
         onApplyResult={(res) => setInspectorSearch(res)}
-        onAddToResult={mergeFilters}
+        onAddItems={handleAddItems}
       />
       <TagsDialog
         isOpen={isTagsDialogOpen && !!selectedId}

@@ -186,17 +186,15 @@ export class ApiClient {
           const errorMessage = `[Contract Validator] Validation failed for ${options.method || 'GET'} ${endpoint}: ${validation.errors.join(', ')}`;
           console.error(errorMessage);
 
-          // Отправляем ошибку валидации в backend логи
-          this.logToBackend('ERROR', errorMessage).catch(() => {
-            // Игнорируем ошибки отправки логов
-          });
-
           // Логируем предупреждения отдельно
           if (validation.warnings.length > 0) {
             const warningMessage = `[Contract Validator] Warnings for ${options.method || 'GET'} ${endpoint}: ${validation.warnings.join(', ')}`;
             console.warn(warningMessage);
-            this.logToBackend('WARN', warningMessage).catch(() => { });
           }
+        } else if (validation.warnings.length > 0) {
+          // Валидация прошла, но есть предупреждения
+          const warningMessage = `[Contract Validator] Warnings for ${options.method || 'GET'} ${endpoint}: ${validation.warnings.join(', ')}`;
+          console.warn(warningMessage);
         }
       }
 
@@ -530,14 +528,13 @@ export class ApiClient {
         body: JSON.stringify({ level, message }),
       });
 
+      // Тихо игнорируем ошибки отправки логов (в т.ч. 400 Bad Request)
+      // чтобы не создавать рекурсивный шум в консоли
       if (!response.ok) {
-        console.warn(`[ApiClient] Failed to send log to backend: ${response.status} ${response.statusText}`);
-      } else {
-        // console.log(`[ApiClient] Log sent successfully to backend: ${level}`); // Отключено
+        // console.warn(`[ApiClient] Failed to send log to backend: ${response.status}`); // Отключено
       }
     } catch (error) {
-      // Логируем ошибку, но не прерываем основной поток
-      console.warn('[ApiClient] Error sending log to backend:', error instanceof Error ? error.message : error);
+      // Тихо игнорируем ошибки сети — логирование не должно мешать основному потоку
     }
   }
 

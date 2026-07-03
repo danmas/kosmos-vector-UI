@@ -6,10 +6,11 @@ interface NaturalQueryDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onApplyResult: (result: string) => void;
-    onAddToResult?: (result: string) => void; // Добавить к текущему фильтру
+    onAddToResult?: (result: string) => void; // Добавить к текущему фильтру (regex)
+    onAddItems?: (ids: string[]) => void;     // Добавить ID напрямую в фильтр
 }
 
-const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose, onApplyResult, onAddToResult }) => {
+const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose, onApplyResult, onAddToResult, onAddItems }) => {
     const [question, setQuestion] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'result' | 'script' | 'raw'>('result');
@@ -308,13 +309,14 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                 const items = response.raw.map((item: any) => {
                     if (typeof item === 'string') return item;
                     // Список приоритетных ключей для имен/id
-                    const idKeys = ['function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
+                    const idKeys = ['full_name', 'function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
                     for (const key of idKeys) {
                         if (item[key]) return String(item[key]);
                     }
-                    // Фоллбэк: берем первое строковое значение
-                    const stringVal = Object.values(item).find(v => typeof v === 'string');
-                    if (stringVal) return String(stringVal);
+                    // Фоллбэк: берем первое строковое значение (исключая метаданные)
+                    const META_KEYS = new Set(['type', 'filename', 'language', 'description', 'file_path', 'filePath']);
+                    const stringVal = Object.entries(item).find(([k, v]) => typeof v === 'string' && !META_KEYS.has(k));
+                    if (stringVal) return String(stringVal[1]);
 
                     return JSON.stringify(item);
                 });
@@ -360,6 +362,28 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
         } else {
             console.log('[NaturalQueryDialog] No raw data to apply');
         }
+    };
+
+    // Извлечение идентификаторов из response.raw (переиспользуемая функция)
+    const extractIdsFromRaw = (raw: any): string[] => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) {
+            if (raw.length === 0) return [];
+            const ID_KEYS = ['full_name', 'function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
+            const META_KEYS = new Set(['type', 'filename', 'language', 'description', 'file_path', 'filePath']);
+            const items = raw.map((item: any) => {
+                if (typeof item === 'string') return item;
+                for (const key of ID_KEYS) {
+                    if (item[key]) return String(item[key]);
+                }
+                const stringVal = Object.entries(item).find(([k, v]) => typeof v === 'string' && !META_KEYS.has(k));
+                if (stringVal) return String(stringVal[1]);
+                return JSON.stringify(item);
+            });
+            return Array.from(new Set(items)).filter(Boolean);
+        }
+        if (typeof raw === 'string') return [raw];
+        return [];
     };
 
     const copyScript = () => {
@@ -833,48 +857,18 @@ const NaturalQueryDialog: React.FC<NaturalQueryDialogProps> = ({ isOpen, onClose
                                                 </pre>
                                             </div>
                                             <div className="flex justify-end gap-2">
-                                                {onAddToResult && (
+                                                {onAddItems && (
                                                     <button
                                                         onClick={() => {
                                                             if (response?.raw) {
-                                                                let filterValue = '';
-                                                                if (Array.isArray(response.raw)) {
-                                                                    if (response.raw.length === 0) return;
-                                                                    const items = response.raw.map((item: any) => {
-                                                                        if (typeof item === 'string') return item;
-                                                                        const idKeys = ['function_name', 'fullName', 'id', 'name', 'source', 'target', 'label'];
-                                                                        for (const key of idKeys) {
-                                                                            if (item[key]) return String(item[key]);
-                                                                        }
-                                                                        const stringVal = Object.values(item).find(v => typeof v === 'string');
-                                                                        if (stringVal) return String(stringVal);
-                                                                        return JSON.stringify(item);
-                                                                    });
-                                                                    const uniqueItems = Array.from(new Set(items)).filter(Boolean);
-                                                                    if (uniqueItems.length === 0) return;
-                                                                    const MAX_REGEX_LENGTH = 2000;
-                                                                    let includedItems: string[] = [];
-                                                                    let currentLength = 10;
-                                                                    for (const item of uniqueItems) {
-                                                                        const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                                                                        if (currentLength + escaped.length + 1 < MAX_REGEX_LENGTH) {
-                                                                            includedItems.push(escaped);
-                                                                            currentLength += escaped.length + 1;
-                                                                        } else {
-                                                                            break;
-                                                                        }
-                                                                    }
-                                                                    filterValue = `/^(?:${includedItems.join('|')})$/i`;
-                                                                } else if (typeof response.raw === 'string') {
-                                                                    filterValue = response.raw;
-                                                                } else {
-                                                                    filterValue = JSON.stringify(response.raw);
+                                                                const ids = extractIdsFromRaw(response.raw);
+                                                                if (ids.length > 0) {
+                                                                    onAddItems(ids);
                                                                 }
-                                                                onAddToResult(filterValue);
                                                             }
                                                         }}
                                                         className="bg-green-700 hover:bg-green-600 text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-green-600 flex items-center gap-1.5"
-                                                        title="Добавить к текущему фильтру"
+                                                        title="Добавить элементы в список отфильтрованных"
                                                     >
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

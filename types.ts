@@ -474,9 +474,51 @@ export interface ColumnExtractionResponse {
 
 // ────────────────────────────────────── RAG Types (v2.7.0)
 
-export type RAGStrategy = 'simple' | 'hierarchical' | 'aiitem' | 'hybrid';
+export type RAGStrategy = 'simple' | 'hierarchical' | 'aiitem' | 'hybrid' | 'ontology';
 export type ChunkLevel = '0-исходник' | '1-связи' | '2-логика';
 export type FormattingStyle = 'compact' | 'standard' | 'full' | 'markdown';
+
+// ────────────────────────────────────── Ontology Types (concept-first retrieval)
+
+export interface OntologyConcept {
+  full_name: string;
+  name: string;
+  similarity: number;
+}
+
+export interface OntologyChainLink {
+  source: string;
+  relation: string;
+  target: string;
+}
+
+export interface OntologyChunkRef {
+  concept: string;
+  role: string;
+  item: string;
+  chunk: string;
+  similarity: number | null;
+}
+
+export interface OntologyAskRequest {
+  question: string;
+  contextCode?: string;
+  maxConcepts?: number;
+  maxChunks?: number;
+  generateAnswer?: boolean;
+}
+
+export interface OntologyAskResponse {
+  question: string;
+  contextCode: string;
+  concepts: OntologyConcept[];
+  chain: OntologyChainLink[];
+  chunks: OntologyChunkRef[];
+  answer?: string;
+  answerError?: string;
+  contextText?: string;
+  note?: string;
+}
 
 export interface RAGFormattingConfig {
   style?: FormattingStyle;

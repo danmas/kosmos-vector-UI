@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../services/apiClient';
 import { useDataCache } from '../lib/context/DataCacheContext';
 import { useGraphFilter } from '../lib/context/GraphFilterContext';
-import type { 
-  RAGStrategy, 
-  FormattingStyle, 
+import type {
+  RAGStrategy,
+  FormattingStyle,
   RAGRetrieveResponse,
   RAGContextMetadata,
   ChatMessage,
-  RAGItemFilter
+  RAGItemFilter,
+  OntologyConcept,
+  OntologyChainLink
 } from '../types';
 
 interface RAGTestDialogProps {
@@ -49,6 +51,8 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RAGRetrieveResponse | null>(null);
   const [chatResult, setChatResult] = useState<string | null>(null);
+  // Ontology-specific: сработавшие понятия и цепочка (только для strategy='ontology')
+  const [ontologyMeta, setOntologyMeta] = useState<{ concepts: OntologyConcept[]; chain: OntologyChainLink[] } | null>(null);
 
   // Reset on open
   useEffect(() => {
@@ -147,6 +151,52 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
 
     setLoading(true);
     setError(null);
+
+    // === Стратегия 'ontology': concept-first retrieval через /api/ontology/ask ===
+    if (strategy === 'ontology') {
+      try {
+        const t0 = performance.now();
+        const resp = await apiClient.ontologyAsk({
+          question: query.trim(),
+          contextCode: currentContextCode || 'CARL',
+          maxChunks,
+          generateAnswer: false, // в Retrieve нужен контекст; ответ LLM — кнопкой Chat
+        });
+        const retrievalTime = Math.round(performance.now() - t0);
+
+        if (!resp.concepts || resp.concepts.length === 0) {
+          setError(resp.note || 'Понятия онтологии не найдены для этого контекста. Онтология загружена и векторизована?');
+          return;
+        }
+
+        setOntologyMeta({ concepts: resp.concepts, chain: resp.chain || [] });
+        // Маппинг в форму RAGRetrieveResponse, чтобы вкладки Result/Chat работали без изменений
+        const contextText = resp.contextText || '';
+        setResult({
+          context: {
+            formatted: contextText,
+            sections: [],
+            metadata: {
+              totalChunks: (resp.chunks || []).length,
+              totalTokens: Math.round(contextText.length / 4),
+              strategy: 'ontology',
+              formattingStyle,
+              usedChunkIds: (resp.chunks || []).map(c => c.chunk),
+            } as unknown as RAGContextMetadata,
+          },
+          retrievalTime,
+        } as unknown as RAGRetrieveResponse);
+        setActiveTab('result');
+      } catch (err) {
+        console.error('[RAGTestDialog] Ontology ask error:', err);
+        setError(err instanceof Error ? err.message : 'Ошибка concept-first retrieval');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    setOntologyMeta(null);
 
     try {
       // Собрать фильтр из GraphFilterContext
@@ -523,6 +573,7 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
                   <option value="hierarchical">Hierarchical (рек.)</option>
                   <option value="aiitem">AI Item (полный)</option>
                   <option value="hybrid">Hybrid (эксп.)</option>
+                  <option value="ontology">Ontology (concept-first)</option>
                 </select>
               </div>
 
@@ -633,6 +684,34 @@ const RAGTestDialog: React.FC<RAGTestDialogProps> = ({ isOpen, onClose }) => {
                     </span>
                   )}
                 </div>
+
+                {/* Ontology: сработавшие понятия и цепочка */}
+                {ontologyMeta && (
+                  <div className="px-2 py-1.5 border-b border-slate-700 bg-slate-900/50 shrink-0">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                      <span className="text-[10px] text-slate-500 font-bold">Понятия:</span>
+                      {ontologyMeta.concepts.map((c) => (
+                        <span key={c.full_name} className="text-[10px] bg-emerald-900/40 border border-emerald-700/40 text-emerald-300 px-1.5 py-0.5 rounded font-mono" title={c.full_name}>
+                          {c.name} <span className="text-emerald-500">{c.similarity.toFixed(2)}</span>
+                        </span>
+                      ))}
+                    </div>
+                    {ontologyMeta.chain.length > 0 && (
+                      <details className="text-[10px] text-slate-400">
+                        <summary className="cursor-pointer hover:text-slate-200">Цепочка: понятие → отношение → цель ({ontologyMeta.chain.length})</summary>
+                        <div className="mt-1 max-h-24 overflow-y-auto font-mono space-y-0.5">
+                          {ontologyMeta.chain.map((l, i) => (
+                            <div key={i}>
+                              <span className="text-emerald-400">{l.source}</span>
+                              <span className="text-slate-500"> —{l.relation.replace('onto_', '')}→ </span>
+                              <span className="text-cyan-400">{l.target}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )}
 
                 {/* Formatted Context */}
                 <div className="flex-1 overflow-y-auto p-2 min-h-0">

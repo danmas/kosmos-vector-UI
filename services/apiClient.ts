@@ -871,6 +871,27 @@ export class ApiClient {
     return this.request<StrategiesResponse>('/api/rag/strategies');
   }
 
+  // ─────────────────── Ontology API (concept-first retrieval) ───────────────────
+
+  /**
+   * POST /api/ontology/ask - Concept-first retrieval: вопрос -> понятия -> grounding -> чанки
+   */
+  async ontologyAsk(request: import('../types').OntologyAskRequest): Promise<import('../types').OntologyAskResponse> {
+    return this.request<import('../types').OntologyAskResponse>('/api/ontology/ask', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * GET /api/ontology/validate - Валидация консистентности онтологии
+   */
+  async ontologyValidate(contextCode?: string, dir?: string): Promise<any> {
+    const dirParam = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return this.request<any>(`/api/ontology/validate${dirParam}`, { contextCode });
+  }
+
   // ─────────────────── App Config API (v2.8.0) ───────────────────
 
   /**

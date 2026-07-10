@@ -203,38 +203,20 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
     }
   };
 
-  const runPipeline = () => {
+  // Реальный запуск pipeline на сервере: Step 1 -> Step 2 (статусы приходят через polling)
+  const runPipeline = async () => {
     if (isRunning) return;
     setIsRunning(true);
-
-    // Reset
-    setSteps(steps.map(s => ({ ...s, status: 'pending' })));
-
-    let currentStepIndex = 0;
-
-    const processNextStep = () => {
-      if (currentStepIndex >= steps.length) {
-        setIsRunning(false);
-        return;
-      }
-
-      setSteps(prev => prev.map((s, i) => {
-        if (i === currentStepIndex) return { ...s, status: 'processing' };
-        return s;
-      }));
-
-      // Simulate processing time
-      setTimeout(() => {
-        setSteps(prev => prev.map((s, i) => {
-          if (i === currentStepIndex) return { ...s, status: 'completed' };
-          return s;
-        }));
-        currentStepIndex++;
-        processNextStep();
-      }, 1200);
-    };
-
-    processNextStep();
+    onOpenLogs?.();
+    setSteps(prev => prev.map(s => ({ ...s, status: 'pending' })));
+    try {
+      await apiClient.startPipeline('incremental');
+    } catch (error) {
+      console.error('Failed to start pipeline:', error);
+      alert('Ошибка запуска pipeline: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   // Очистка векторной БД
@@ -279,7 +261,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
 
                 {/* Status Icon - кликабельный */}
                 <div
-                  onClick={() => runStep(index + 1)}
+                  onClick={() => runStep(parseInt(step.id, 10))}
                   className={`absolute left-0 top-0.5 w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-slate-800 transition-all text-xs ${step.status === 'completed' ? 'border-green-500 text-green-500 hover:border-green-400 hover:bg-green-900/20 cursor-pointer' :
                       step.status === 'processing' ? 'border-blue-500 text-blue-500 animate-pulse cursor-wait' :
                         step.status === 'error' ? 'border-red-500 text-red-500 hover:border-red-400 hover:bg-red-900/20 cursor-pointer' :
@@ -357,7 +339,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
               className={`px-3 py-1.5 rounded text-xs font-bold text-white shadow-lg transition-all transform hover:scale-105 ${isRunning ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500'
                 }`}
             >
-              {isRunning ? 'Processing...' : 'Run Simulation'}
+              {isRunning ? 'Starting...' : 'Run Pipeline (1→2)'}
             </button>
           </div>
         </div>
@@ -368,18 +350,19 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
             <h3 className="text-sm font-bold text-white mb-2">How Vectorization Works</h3>
             <div className="text-slate-400 text-xs space-y-1.5">
               <p>
-                1. <span className="text-blue-400 font-bold">Chunking:</span> Code is not split by lines, but by "AiItems" (functions/classes). This preserves context.
+                1. <span className="text-blue-400 font-bold">Chunking:</span> код режется не по строкам, а по AI Items (функции/классы/секции документов) — контекст сущности сохраняется целиком.
               </p>
               <p>
-                2. <span className="text-blue-400 font-bold">Description Generation:</span> An LLM reads the code and generates a summary (L2).
-                <br />
-                <em className="text-slate-500">"This function calculates the Fibonacci sequence recursively."</em>
+                2. <span className="text-blue-400 font-bold">Step 1 → Step 2:</span> загрузчики создают AI Items и L0-чанки, затем резолвятся L1-зависимости и строится граф связей (calls, reads from, updates...).
               </p>
               <p>
-                3. <span className="text-blue-400 font-bold">Embedding:</span> The summary + signature is sent to an Embedding Model (e.g., Gemini Embedding) to produce a vector (e.g., `[0.1, -0.5, ...]`).
+                3. <span className="text-blue-400 font-bold">Embedding (Step 4):</span> текст чанка отправляется в модель эмбеддингов (OpenAI при USE_OPENAI=true, иначе SimpleEmbeddings) — получается вектор 1536.
               </p>
               <p>
-                4. <span className="text-blue-400 font-bold">Storage:</span> Vectors are saved in a local `faiss.index` file for millisecond-speed retrieval.
+                4. <span className="text-blue-400 font-bold">Storage:</span> вектора хранятся в PostgreSQL (pgvector, таблица kosmos.chunk_vector), поиск — косинусная близость с ivfflat-индексом.
+              </p>
+              <p>
+                5. <span className="text-emerald-400 font-bold">Ontology:</span> поверх чанков живёт онтологический уровень — понятия домена с grounding в код (стратегия «Ontology» в RAG Test).
               </p>
             </div>
           </div>

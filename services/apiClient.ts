@@ -400,6 +400,14 @@ export class ApiClient {
     });
   }
 
+  // Запуск полного pipeline (Step 1 -> Step 2)
+  async startPipeline(mode: 'incremental' | 'full' = 'incremental'): Promise<{ success: boolean; pipelineId?: string }> {
+    return this.request<{ success: boolean; pipelineId?: string }>('/api/pipeline/start', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    });
+  }
+
   // Get status of all pipeline steps
   async getPipelineStepsStatus(): Promise<{ success: boolean; steps: any[] }> {
     return this.request<{ success: boolean; steps: any[] }>('/api/pipeline/steps/status');

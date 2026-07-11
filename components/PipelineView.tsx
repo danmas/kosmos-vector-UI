@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PipelineStep } from '../types';
+import { OntologyBuilderStatus, PipelineStep } from '../types';
 import { apiClient } from '../services/apiClient';
 import { useDataCache } from '../lib/context/DataCacheContext';
+import OntologyBuilderDialog from './OntologyBuilderDialog';
+
+/** Steps without a real runner — shown but not clickable */
+const DISABLED_STEP_IDS = new Set([3, 5]);
 
 const STEP_DETAILS: Record<number, string> = {
   1: 'Parsing AST for .py, .ts, .go, .java files...',
   2: 'Resolving imports, class hierarchy, and calls...',
-  3: 'Generating natural language descriptions via LLM...',
+  3: 'Не реализовано (L2 enrichment) — шаг отключён',
   4: 'Creating embeddings (text-embedding-ada-002 or Gecko)...',
-  5: 'Building FAISS/ChromaDB index...'
+  5: 'Не реализовано (отдельный indexing) — шаг отключён; индекс = pgvector после Step 4',
+  6: 'Interactive ontology builder from vectorized reality (not a batch runner)...'
 };
 
 const STEP_LABELS: Record<number, string> = {
@@ -16,7 +21,8 @@ const STEP_LABELS: Record<number, string> = {
   2: '+Dependency Analysis (L1)',
   3: '+Semantic Enrichment (L2)',
   4: '+Vectorization',
-  5: '+Index Construction'
+  5: '+Index Construction',
+  6: '+Ontology Builder'
 };
 
 interface PipelineViewProps {
@@ -34,6 +40,8 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+  const [showOntologyBuilder, setShowOntologyBuilder] = useState(false);
+  const [builderStatus, setBuilderStatus] = useState<OntologyBuilderStatus | null>(null);
 
   // Ref для отслеживания предыдущих статусов шагов (чтобы определить переход в completed)
   const prevStepsRef = useRef<PipelineStep[]>(steps);
@@ -44,8 +52,28 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
       const response = await apiClient.getPipelineStepsStatus();
       if (response.success && response.steps) {
         const serverSteps = response.steps;
+        const s6 = serverSteps.find((s: any) => s.id === 6);
+        if (s6?.builderStatus) {
+          setBuilderStatus(s6.builderStatus as OntologyBuilderStatus);
+        }
         setSteps(prevSteps => {
-          const newSteps = prevSteps.map(prevStep => {
+          // If server returned new step ids (e.g. Step 6) missing from local state, merge
+          const knownIds = new Set(prevSteps.map(p => p.id));
+          let base = prevSteps;
+          for (const ss of serverSteps) {
+            if (!knownIds.has(String(ss.id))) {
+              base = [
+                ...base,
+                {
+                  id: String(ss.id),
+                  label: ss.label || STEP_LABELS[ss.id] || `Step ${ss.id}`,
+                  status: 'pending' as const,
+                  details: STEP_DETAILS[ss.id]
+                }
+              ];
+            }
+          }
+          const newSteps = base.map(prevStep => {
             const serverStep = serverSteps.find(s => s.id === parseInt(prevStep.id));
             if (serverStep) {
               // Маппинг статусов с сервера на статусы фронтенда
@@ -58,9 +86,21 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
                 status = 'error';
               }
 
+              const gateBlocked = prevStep.id === '6' && (serverStep as any).builderStatus?.gated;
+              let details = prevStep.details;
+              if (prevStep.id === '6') {
+                const bs = (serverStep as any).builderStatus as OntologyBuilderStatus | undefined;
+                if (bs?.gated) {
+                  details = 'Заблокировано: сначала векторизация (Step 4)';
+                } else if (bs) {
+                  details = `Понятий в БД: ${bs.conceptsInDb}; draft: ${bs.draftFiles}; verified: ${bs.verifiedFiles}`;
+                }
+              }
+
               return {
                 ...prevStep,
-                status,
+                status: gateBlocked && status === 'pending' ? 'pending' : status,
+                details,
                 // label берётся из context-definition (loadContextData), не перезаписываем из status endpoint
                 report: (serverStep as any).report || null
               };
@@ -107,26 +147,22 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
         setStepDefinitions(dbRes.steps);
         // Всегда обновляем steps на основе определений с сервера (labels могут измениться)
         setSteps(prev => {
-          if (prev.length === 0) {
-            // Первая инициализация
-            return dbRes.steps.map(s => ({
-              id: s.id.toString(),
-              label: s.label,
-              status: 'pending',
-              details: s.description
-            }));
-          }
-          // Обновляем labels из определений сервера, сохраняя статусы
-          return prev.map(prevStep => {
-            const serverDef = dbRes.steps.find(s => s.id.toString() === prevStep.id);
-            if (serverDef) {
+          const byId = new Map(prev.map(s => [s.id, s]));
+          return dbRes.steps.map(s => {
+            const existing = byId.get(s.id.toString());
+            if (existing) {
               return {
-                ...prevStep,
-                label: serverDef.label,  // Всегда берём label с сервера
-                details: serverDef.description
+                ...existing,
+                label: s.label,
+                details: s.description
               };
             }
-            return prevStep;
+            return {
+              id: s.id.toString(),
+              label: s.label,
+              status: 'pending' as const,
+              details: s.description
+            };
           });
         });
       }
@@ -169,8 +205,21 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
     }
   };
 
-  // Запуск отдельного шага
+  // Запуск отдельного шага (Step 6 opens builder dialog instead of runner)
   const runStep = async (stepId: number) => {
+    if (DISABLED_STEP_IDS.has(stepId)) {
+      return;
+    }
+
+    if (stepId === 6) {
+      if (builderStatus?.gated) {
+        alert(builderStatus.gateReason || 'Сначала выполните векторизацию (Step 4)');
+        return;
+      }
+      setShowOntologyBuilder(true);
+      return;
+    }
+
     // Проверяем, не выполняется ли уже этот шаг
     if (loadingSteps.has(stepId)) {
       return;
@@ -251,40 +300,77 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
         {/* Pipeline Steps */}
         <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 shadow-xl">
           <div className="space-y-3">
-            {steps.map((step, index) => (
-              <div key={step.id} className="relative pl-8">
+            {steps.map((step, index) => {
+              const stepIdNum = parseInt(step.id, 10);
+              const isDisabledStep = DISABLED_STEP_IDS.has(stepIdNum);
+              const isGatedBuilder = step.id === '6' && !!builderStatus?.gated;
+              const details =
+                isDisabledStep
+                  ? (STEP_DETAILS[stepIdNum] || step.details)
+                  : step.details;
+
+              return (
+              <div key={step.id} className={`relative pl-8 ${isDisabledStep ? 'opacity-45' : ''}`}>
                 {/* Connector Line */}
                 {index !== steps.length - 1 && (
                   <div className={`absolute left-[15px] top-6 bottom-[-12px] w-0.5 ${step.status === 'completed' ? 'bg-green-500' : 'bg-slate-700'
                     }`} />
                 )}
 
-                {/* Status Icon - кликабельный */}
+                {/* Status Icon; Step 3/5 disabled; Step 6 opens Ontology Builder dialog */}
                 <div
-                  onClick={() => runStep(parseInt(step.id, 10))}
-                  className={`absolute left-0 top-0.5 w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-slate-800 transition-all text-xs ${step.status === 'completed' ? 'border-green-500 text-green-500 hover:border-green-400 hover:bg-green-900/20 cursor-pointer' :
+                  onClick={() => {
+                    if (isDisabledStep) return;
+                    runStep(stepIdNum);
+                  }}
+                  className={`absolute left-0 top-0.5 w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-slate-800 transition-all text-xs ${
+                      isDisabledStep
+                        ? 'border-slate-700 text-slate-600 cursor-not-allowed'
+                        : isGatedBuilder
+                        ? 'border-amber-500 text-amber-500 cursor-not-allowed opacity-70'
+                        : step.status === 'completed' ? 'border-green-500 text-green-500 hover:border-green-400 hover:bg-green-900/20 cursor-pointer' :
                       step.status === 'processing' ? 'border-blue-500 text-blue-500 animate-pulse cursor-wait' :
                         step.status === 'error' ? 'border-red-500 text-red-500 hover:border-red-400 hover:bg-red-900/20 cursor-pointer' :
                           'border-slate-600 text-slate-600 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-900/20 cursor-pointer'
                     }`}
-                  title={step.status === 'processing' ? 'Processing...' : `Click to run ${step.label}`}
+                  title={
+                    isDisabledStep
+                      ? 'Шаг не реализован и отключён'
+                      : step.id === '6'
+                      ? (builderStatus?.gated
+                        ? (builderStatus.gateReason || 'Сначала векторизация')
+                        : 'Open Ontology Builder')
+                      : (step.status === 'processing' ? 'Processing...' : `Click to run ${step.label}`)
+                  }
                 >
-                  {step.status === 'completed' ? '✓' :
+                  {isDisabledStep ? '–' :
+                    step.status === 'completed' ? '✓' :
                     step.status === 'processing' ? '↻' :
                       (index + 1)}
                 </div>
 
                 {/* Content */}
-                <div className={`p-2 rounded-lg border transition-all ${step.status === 'processing' ? 'bg-blue-900/20 border-blue-500/50' :
+                <div className={`p-2 rounded-lg border transition-all ${
+                    isDisabledStep ? 'bg-slate-900/50 border-slate-800' :
+                    step.status === 'processing' ? 'bg-blue-900/20 border-blue-500/50' :
                     step.status === 'completed' ? 'bg-green-900/10 border-green-500/30' :
                       'bg-slate-900 border-slate-700'
                   }`}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className={`font-semibold text-sm ${step.status === 'completed' ? 'text-green-400' :
+                      <h3 className={`font-semibold text-sm ${
+                          isDisabledStep ? 'text-slate-500' :
+                          step.status === 'completed' ? 'text-green-400' :
                           step.status === 'processing' ? 'text-blue-400' : 'text-slate-300'
-                        }`}>{step.label}</h3>
-                      <p className="text-slate-500 text-xs mt-0.5">{step.details}</p>
+                        }`}>
+                        {step.label}
+                        {isDisabledStep && (
+                          <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-slate-600 border border-slate-700 rounded px-1 py-0.5">
+                            disabled
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-slate-500 text-xs mt-0.5">{details}</p>
                     </div>
                     {(step.status === 'completed' || step.status === 'error') && step.report && (
                       <button
@@ -304,14 +390,15 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
                     )}
                   </div>
 
-                  {step.status === 'processing' && (
+                  {step.status === 'processing' && !isDisabledStep && (
                     <div className="mt-2 w-full bg-slate-700 rounded-full h-1 overflow-hidden">
                       <div className="bg-blue-500 h-1 rounded-full animate-progress"></div>
                     </div>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-3 flex justify-end gap-2">
@@ -413,6 +500,14 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
           </div>
         </div>
       </div>
+
+      <OntologyBuilderDialog
+        isOpen={showOntologyBuilder}
+        onClose={() => {
+          setShowOntologyBuilder(false);
+          fetchStepsStatus();
+        }}
+      />
 
       {/* Диалог подтверждения очистки векторной БД */}
       {showClearConfirm && (

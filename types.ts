@@ -520,6 +520,151 @@ export interface OntologyAskResponse {
   note?: string;
 }
 
+// ────────────────────────────────────── Ontology Builder (Step 6)
+
+export type OntologyBuildDepth = 'concepts' | 'concepts+grounding';
+export type OntologyRelationType =
+  | 'part_of'
+  | 'uses'
+  | 'manages'
+  | 'produces'
+  | 'consumes'
+  | 'precedes'
+  | 'related_to';
+export type OntologyGroundingRole =
+  | 'implemented_in'
+  | 'stored_in'
+  | 'documented_in'
+  | 'configured_in';
+
+export interface OntologyGroundingCandidate {
+  role: OntologyGroundingRole;
+  target: string;
+  confidence: number;
+  source: string;
+  accepted?: boolean;
+}
+
+export interface OntologyRelationDraft {
+  type: OntologyRelationType;
+  target: string;
+  comment?: string;
+}
+
+export interface OntologyConceptCandidate {
+  id: string;
+  name: string;
+  rationale?: string;
+  description?: string;
+  aspects?: string[];
+  relations?: OntologyRelationDraft[];
+  groundingCandidates?: OntologyGroundingCandidate[];
+  accepted?: boolean;
+}
+
+export interface OntologyBuildSuggestRequest {
+  maxConcepts?: number;
+  aspects?: string[];
+  seedConcepts?: string[];
+  depth?: OntologyBuildDepth;
+  contextCode?: string;
+}
+
+export interface OntologyBuildSuggestResponse {
+  contextCode: string;
+  depth: OntologyBuildDepth;
+  maxConcepts: number;
+  source: string;
+  suggestedAt: string;
+  concepts: OntologyConceptCandidate[];
+  meta?: {
+    anchorsConsidered?: number;
+    seedExcluded?: number;
+  };
+}
+
+export interface OntologyBuildMaterializeRequest {
+  concepts: OntologyConceptCandidate[];
+  overwrite?: boolean;
+  dryRun?: boolean;
+  contextCode?: string;
+}
+
+export interface OntologyBuildMaterializeResponse {
+  contextCode: string;
+  outDir: string;
+  dirs?: string[];
+  dirsSource?: 'request' | 'config' | 'default';
+  configUpdated?: boolean;
+  warning?: string | null;
+  written: Array<{ id: string; path: string }>;
+  skippedExisting?: Array<{ id: string; path?: string; reason: string }>;
+  conflicts: Array<{ id: string; path?: string; reason: string }>;
+  previews?: Array<{ id: string; path: string; preview: string }>;
+  dryRun?: boolean;
+  error?: string;
+}
+
+export interface OntologyBuildApplyRequest {
+  concepts?: OntologyConceptCandidate[];
+  overwrite?: boolean;
+  contextCode?: string;
+}
+
+export interface OntologyValidateSummary {
+  brokenGrounding: number;
+  staleGroundingTargets: number;
+  conceptsWithoutGrounding: number;
+  danglingRelations: number;
+  coverage?: string;
+  ok: boolean;
+}
+
+export interface OntologyBuildApplyResponse {
+  contextCode: string;
+  startedAt: string;
+  finishedAt?: string;
+  materialize?: OntologyBuildMaterializeResponse | null;
+  load?: {
+    success: boolean;
+    conceptsLoaded?: number;
+    dirs?: unknown[];
+  } | null;
+  vectorize?: {
+    vectorized?: number;
+    totalChunks?: number;
+    skippedEmpty?: number;
+    batchErrors?: number;
+  } | null;
+  validate?: {
+    summary: OntologyValidateSummary;
+    details?: {
+      coverageByType?: Array<{ type: string; total: number; covered: number }>;
+      uncoveredSamples?: Array<{ full_name: string; type: string; chunks: number }>;
+      brokenGrounding?: unknown[];
+      staleGrounding?: unknown[];
+      conceptsWithoutGrounding?: string[];
+    };
+  } | null;
+  success: boolean;
+  abortedAt?: string | null;
+  error?: { message: string; errors?: string[]; conflicts?: unknown } | null;
+}
+
+export interface OntologyBuilderStatus {
+  conceptsInDb: number;
+  draftFiles: number;
+  verifiedFiles: number;
+  vectorizedReality: number;
+  conceptsDir?: string | null;
+  dirsSource?: string | null;
+  ontoLoadingOk?: boolean;
+  ontoLoadingReason?: string | null;
+  ontoLoadingExampleDir?: string | null;
+  gated: boolean;
+  gateReason: string | null;
+}
+
 export interface RAGFormattingConfig {
   style?: FormattingStyle;
   includeFileNames?: boolean;

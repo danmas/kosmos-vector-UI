@@ -200,12 +200,19 @@ export class ApiClient {
 
       if (!response.ok) {
         // Ошибка HTTP уже залогирована выше через uiLogger.logRequest
-        throw new ApiError(
-          (responseData && typeof responseData === 'object' && responseData.error) || `HTTP ${response.status}: ${response.statusText}`,
-          response.status,
-          'HTTP_ERROR',
-          responseData
-        );
+        let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+        if (responseData && typeof responseData === 'object') {
+          if (typeof responseData.error === 'string') {
+            errorMsg = responseData.error;
+          } else if (responseData.error && typeof responseData.error.message === 'string') {
+            errorMsg = responseData.error.message;
+          } else if (typeof responseData.message === 'string') {
+            errorMsg = responseData.message;
+          }
+        }
+        const errorCode =
+          (responseData && typeof responseData === 'object' && responseData.code) || 'HTTP_ERROR';
+        throw new ApiError(errorMsg, response.status, errorCode, responseData);
       }
 
       // console.log('[ApiClient] Request successful:', { url, status, ... }); // Отключено
@@ -898,6 +905,54 @@ export class ApiClient {
   async ontologyValidate(contextCode?: string, dir?: string): Promise<any> {
     const dirParam = dir ? `?dir=${encodeURIComponent(dir)}` : '';
     return this.request<any>(`/api/ontology/validate${dirParam}`, { contextCode });
+  }
+
+  /**
+   * POST /api/ontology/build/suggest — read-only draft concepts from vectorized reality
+   */
+  async ontologyBuildSuggest(
+    request: import('../types').OntologyBuildSuggestRequest = {}
+  ): Promise<import('../types').OntologyBuildSuggestResponse> {
+    return this.request<import('../types').OntologyBuildSuggestResponse>('/api/ontology/build/suggest', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * POST /api/ontology/build/materialize — write concepts/*.md (status: draft)
+   */
+  async ontologyBuildMaterialize(
+    request: import('../types').OntologyBuildMaterializeRequest
+  ): Promise<import('../types').OntologyBuildMaterializeResponse> {
+    return this.request<import('../types').OntologyBuildMaterializeResponse>('/api/ontology/build/materialize', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * POST /api/ontology/build/apply — materialize → onto_loading → vectorize concept:* → validate
+   */
+  async ontologyBuildApply(
+    request: import('../types').OntologyBuildApplyRequest = {}
+  ): Promise<import('../types').OntologyBuildApplyResponse> {
+    return this.request<import('../types').OntologyBuildApplyResponse>('/api/ontology/build/apply', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
+   * GET /api/ontology/build/status — Step 6 card snapshot
+   */
+  async ontologyBuildStatus(contextCode?: string): Promise<import('../types').OntologyBuilderStatus> {
+    return this.request<import('../types').OntologyBuilderStatus>('/api/ontology/build/status', {
+      contextCode,
+    });
   }
 
   // ─────────────────── App Config API (v2.8.0) ───────────────────

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OntologyBuildApplyResponse,
   OntologyBuildDepth,
@@ -13,6 +13,9 @@ interface OntologyBuilderDialogProps {
   onClose: () => void;
   initialSeedConcepts?: string[];
 }
+
+/** Stable empty array — default `= []` creates new ref every render and loops useEffect */
+const EMPTY_SEEDS: string[] = [];
 
 type BusyOp = null | 'suggest' | 'materialize' | 'apply';
 
@@ -123,13 +126,16 @@ function configErrorLines(e: any): string[] {
 const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
   isOpen,
   onClose,
-  initialSeedConcepts = [],
+  initialSeedConcepts = EMPTY_SEEDS,
 }) => {
+  const seeds = initialSeedConcepts.length ? initialSeedConcepts : EMPTY_SEEDS;
+  const seedsKey = seeds.join('\0');
+
   const [contextCode] = useState(() => getUiContextCode());
   const [maxConcepts, setMaxConcepts] = useState(20);
   const [depth, setDepth] = useState<OntologyBuildDepth>('concepts+grounding');
   const [aspects, setAspects] = useState('domain');
-  const [seedConcepts, setSeedConcepts] = useState(initialSeedConcepts.join(', '));
+  const [seedConcepts, setSeedConcepts] = useState(() => seeds.join(', '));
   const [concepts, setConcepts] = useState<OntologyConceptCandidate[]>([]);
   const [source, setSource] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
@@ -138,23 +144,46 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
   const [materializeResult, setMaterializeResult] = useState<OntologyBuildMaterializeResponse | null>(null);
   const [applyResult, setApplyResult] = useState<OntologyBuildApplyResponse | null>(null);
   const [suggestElapsedSec, setSuggestElapsedSec] = useState(0);
+  const [byoOpen, setByoOpen] = useState(false);
+  const [byoTab, setByoTab] = useState<'export' | 'import'>('export');
+  const [exportPack, setExportPack] = useState<import('../types').OntologyBuildExportPromptResponse | null>(null);
+  const [importText, setImportText] = useState('');
+  const [copyOk, setCopyOk] = useState<string | null>(null);
 
-  // Restore draft when dialog opens (so Suggest is not required every time)
+  /** Skip autosave once after restore (avoid save thrash / loops) */
+  const skipNextAutosaveRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  const lastDraftJsonRef = useRef<string>('');
+
+  // Restore draft only when dialog opens (isOpen false → true)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return; // already open — don't re-restore every parent render
+    wasOpenRef.current = true;
 
     const draft = loadDraft(getUiContextCode());
     if (draft && draft.concepts.length > 0) {
+      skipNextAutosaveRef.current = true;
       setMaxConcepts(draft.maxConcepts || 20);
       setDepth(draft.depth || 'concepts+grounding');
       setAspects(draft.aspects || 'domain');
       setSeedConcepts(
-        draft.seedConcepts ||
-          (initialSeedConcepts.length ? initialSeedConcepts.join(', ') : '')
+        draft.seedConcepts || (seedsKey ? seedsKey.split('\0').join(', ') : '')
       );
       setSource(draft.source);
       setConcepts(draft.concepts);
       setDraftSavedAt(draft.savedAt);
+      lastDraftJsonRef.current = JSON.stringify({
+        maxConcepts: draft.maxConcepts,
+        depth: draft.depth,
+        aspects: draft.aspects,
+        seedConcepts: draft.seedConcepts,
+        source: draft.source,
+        concepts: draft.concepts,
+      });
       setBanner({
         kind: 'info',
         title: `Восстановлен черновик (${draft.concepts.length} понятий)`,
@@ -167,27 +196,42 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
       });
     } else {
       setBanner(null);
-      if (initialSeedConcepts.length) {
-        setSeedConcepts(initialSeedConcepts.join(', '));
+      if (seedsKey) {
+        setSeedConcepts(seedsKey.split('\0').join(', '));
       }
     }
-  }, [isOpen, initialSeedConcepts]);
+  }, [isOpen, seedsKey]);
 
-  // Auto-save draft on edits after we have candidates
+  // Auto-save draft (debounced); only when payload actually changes
   useEffect(() => {
     if (!isOpen || concepts.length === 0) return;
-    const savedAt = new Date().toISOString();
-    saveDraft({
-      contextCode: getUiContextCode(),
-      savedAt,
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+
+    const payload = {
       maxConcepts,
       depth,
       aspects,
       seedConcepts,
       source,
       concepts,
-    });
-    setDraftSavedAt(savedAt);
+    };
+    const json = JSON.stringify(payload);
+    if (json === lastDraftJsonRef.current) return;
+    lastDraftJsonRef.current = json;
+
+    const savedAt = new Date().toISOString();
+    const t = window.setTimeout(() => {
+      saveDraft({
+        contextCode: getUiContextCode(),
+        savedAt,
+        ...payload,
+      });
+      setDraftSavedAt(savedAt);
+    }, 300);
+    return () => window.clearTimeout(t);
   }, [isOpen, concepts, maxConcepts, depth, aspects, seedConcepts, source]);
 
   // Elapsed timer while busy (especially suggest)
@@ -210,6 +254,8 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
 
   const handleClearDraft = () => {
     clearDraft(getUiContextCode());
+    lastDraftJsonRef.current = '';
+    skipNextAutosaveRef.current = true;
     setConcepts([]);
     setSource(null);
     setDraftSavedAt(null);
@@ -239,6 +285,44 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
       .map((s) => s.trim())
       .filter(Boolean);
 
+  const applySuggestResult = (
+    res: import('../types').OntologyBuildSuggestResponse,
+    opts?: { titlePrefix?: string }
+  ) => {
+    setSource(res.source);
+    const list = (res.concepts || []).map((c) => ({
+      ...c,
+      accepted: true,
+      groundingCandidates: (c.groundingCandidates || []).map((g) => ({
+        ...g,
+        accepted: g.confidence >= 0.5,
+      })),
+    }));
+    setConcepts(list);
+    const modelLabel =
+      res.model ||
+      (res.source === 'external-llm' ? 'внешний чат (BYO)' : 'KOSMOS_MODEL (default)');
+    const srcLabel =
+      res.source === 'llm'
+        ? 'встроенный LLM'
+        : res.source === 'external-llm'
+          ? 'внешний LLM (import)'
+          : res.source;
+    setBanner({
+      kind: list.length ? 'success' : 'warning',
+      title: list.length
+        ? `${opts?.titlePrefix || 'Предложено понятий'}: ${list.length}`
+        : 'Черновик пуст',
+      lines: [
+        `Источник: ${srcLabel}`,
+        `Модель: ${modelLabel} · глубина: ${res.depth}`,
+        list.length
+          ? 'Отметьте нужные понятия → «Записать MD» / «Применить».'
+          : 'Другой JSON или maxConcepts.',
+      ],
+    });
+  };
+
   const handleSuggest = async () => {
     setBusy('suggest');
     setBanner(null);
@@ -251,38 +335,122 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
         aspects: parseAspects(),
         seedConcepts: parseSeed(),
       });
-      setSource(res.source);
-      const list = (res.concepts || []).map((c) => ({
-        ...c,
-        accepted: true,
-        groundingCandidates: (c.groundingCandidates || []).map((g) => ({
-          ...g,
-          accepted: g.confidence >= 0.5,
-        })),
-      }));
-      setConcepts(list);
+      applySuggestResult(res);
+    } catch (e: any) {
+      setConcepts([]);
+      const code = e?.code || e?.data?.code;
+      const isBadJson =
+        code === 'LLM_BAD_JSON' ||
+        /Unterminated string|битый|обрезанный JSON/i.test(errMessage(e));
+      const isLlm =
+        isBadJson || code === 'LLM_REQUIRED' || /LLM|ИИ|model/i.test(errMessage(e));
       setBanner({
-        kind: list.length ? 'success' : 'warning',
-        title: list.length
-          ? `Предложено понятий: ${list.length}`
-          : 'Черновик пуст',
+        kind: 'error',
+        title: isBadJson
+          ? '«Без ИИ жизни нет!» — LLM вернул битый JSON'
+          : isLlm
+            ? '«Без ИИ жизни нет!» — suggest остановлен'
+            : 'Suggest не удался',
         lines: [
-          `Источник: ${res.source === 'llm' ? 'LLM + якоря' : res.source === 'heuristic' ? 'эвристика (LLM недоступен)' : res.source}`,
-          `Глубина: ${res.depth}`,
-          list.length
-            ? 'Отметьте нужные понятия, поправьте id/name/grounding, затем «Записать MD» или «Применить».'
-            : 'Попробуйте увеличить maxConcepts или уберите seedConcepts.',
+          ...errMessage(e)
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+          isBadJson
+            ? 'Или: «Внешняя LLM» → скопировать промпт → вставить ответ.'
+            : isLlm
+              ? 'Проверьте Settings / модель, либо используйте «Внешняя LLM».'
+              : '',
+        ].filter(Boolean),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleExportPrompt = async () => {
+    setBusy('suggest');
+    setBanner(null);
+    try {
+      const pack = await apiClient.ontologyBuildExportPrompt({
+        maxConcepts,
+        depth,
+        aspects: parseAspects(),
+        seedConcepts: parseSeed(),
+      });
+      setExportPack(pack);
+      setByoTab('export');
+      setByoOpen(true);
+      setBanner({
+        kind: 'info',
+        title: 'Промпт для внешней LLM готов',
+        lines: [
+          `Якорей: ${pack.anchorsInPrompt}` +
+            (pack.tablesInPrompt != null ? ` (tables: ${pack.tablesInPrompt})` : '') +
+            `, maxConcepts: ${pack.maxConcepts}`,
+          `seedMode: ${(pack as any).seedMode || 'user-only'}` +
+            ` · avoid: ${(pack as any).seedAvoidCount ?? '—'}` +
+            ` · existing listed: ${(pack as any).existingConceptsListed ?? '—'}`,
+          'Скопируйте combined → внешний чат → «Вставить ответ». Ожидайте domain ids, не *-mutation.',
         ],
       });
     } catch (e: any) {
-      setConcepts([]);
       setBanner({
         kind: 'error',
-        title: 'Suggest не удался',
+        title: 'Не удалось собрать промпт',
         lines: [errMessage(e)],
       });
     } finally {
       setBusy(null);
+    }
+  };
+
+  const handleImportLlm = async () => {
+    if (!importText.trim()) {
+      setBanner({
+        kind: 'warning',
+        title: 'Вставьте ответ LLM',
+        lines: ['Нужен JSON {"concepts":[...]} (можно из ```json блока).'],
+      });
+      return;
+    }
+    setBusy('suggest');
+    setBanner(null);
+    setApplyResult(null);
+    setMaterializeResult(null);
+    try {
+      const res = await apiClient.ontologyBuildImport({
+        text: importText,
+        maxConcepts,
+        depth,
+        aspects: parseAspects(),
+        seedConcepts: parseSeed(),
+      });
+      applySuggestResult(res, { titlePrefix: 'Импорт: понятий' });
+      setByoOpen(false);
+    } catch (e: any) {
+      setBanner({
+        kind: 'error',
+        title: 'Импорт ответа LLM не удался',
+        lines: [
+          ...errMessage(e)
+            .split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ],
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const copyText = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyOk(label);
+      setTimeout(() => setCopyOk(null), 2000);
+    } catch {
+      setCopyOk('fail');
     }
   };
 
@@ -617,67 +785,225 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
             </label>
           </div>
 
-          <div className="flex flex-wrap gap-2 items-center">
-            <button
-              onClick={handleSuggest}
-              disabled={!!busy}
-              className="px-3 py-1.5 rounded text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
-              title="Сгенерировать/обновить черновик (LLM). Сохраняется локально."
-            >
-              {concepts.length ? 'Обновить (suggest)' : 'Предложить (suggest)'}
-            </button>
-            <button
-              onClick={handleMaterialize}
-              disabled={!!busy || !acceptedConcepts.length}
-              className="px-3 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
-              title={
-                acceptedConcepts.length
-                  ? 'Только запись MD на диск (без загрузки в БД)'
-                  : 'Нужен черновик: Suggest или восстановленный draft'
-              }
-            >
-              Записать MD (materialize)
-            </button>
-            <button
-              onClick={handleApply}
-              disabled={!!busy}
-              className="px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
-              title={
-                acceptedConcepts.length
-                  ? 'MD (если есть отмеченные) → БД → vectors → validate'
-                  : 'Без таблицы: только load существующих concepts/*.md → vectors → validate'
-              }
-            >
-              Применить (apply)
-            </button>
-            {concepts.length > 0 && (
-              <button
-                onClick={handleClearDraft}
-                disabled={!!busy}
-                className="px-3 py-1.5 rounded text-xs font-bold text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
-                title="Сбросить локальный черновик suggest"
-              >
-                Очистить черновик
-              </button>
-            )}
-            {source && (
-              <span className="text-xs text-slate-400">
-                suggest: {source}
-              </span>
-            )}
-            {draftSavedAt && concepts.length > 0 && (
-              <span className="text-xs text-emerald-500/80" title="localStorage по context-code">
-                черновик сохранён · {new Date(draftSavedAt).toLocaleTimeString()}
-              </span>
-            )}
+          {/* Numbered action groups: 1 = get draft (same step, two channels), 2 = MD, 3 = apply */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-stretch gap-2">
+              {/* Step 1 — draft via built-in or external LLM */}
+              <div className="flex flex-col gap-1.5 rounded-lg border border-blue-500/40 bg-blue-950/30 p-2 min-w-[11rem]">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-blue-300/90">
+                  1 · Черновик (suggest)
+                </div>
+                <p className="text-[10px] text-slate-500 leading-snug max-w-[14rem]">
+                  Один шаг: получить concepts. Либо встроенный LLM, либо свой чат (промпт → ответ).
+                </p>
+                <button
+                  onClick={handleSuggest}
+                  disabled={!!busy}
+                  className="px-3 py-1.5 rounded text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50"
+                  title="Встроенный kosmos-model (тот же pipeline, что import)"
+                >
+                  {concepts.length ? 'Обновить (встроенный LLM)' : 'Предложить (встроенный LLM)'}
+                </button>
+                <button
+                  onClick={() => {
+                    setByoOpen(true);
+                    setByoTab('export');
+                    if (!exportPack) handleExportPrompt();
+                  }}
+                  disabled={!!busy}
+                  className="px-3 py-1.5 rounded text-xs font-bold text-white bg-violet-700 hover:bg-violet-600 disabled:opacity-50"
+                  title="Скопировать промпт → внешний чат → вставить JSON (как Suggest)"
+                >
+                  Внешняя LLM…
+                </button>
+              </div>
+
+              {/* Step 2 — materialize */}
+              <div className="flex flex-col gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-950/25 p-2 min-w-[10rem]">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-300/90">
+                  2 · Файлы MD
+                </div>
+                <p className="text-[10px] text-slate-500 leading-snug">Запись concepts/*.md (draft)</p>
+                <button
+                  onClick={handleMaterialize}
+                  disabled={!!busy || !acceptedConcepts.length}
+                  className="px-3 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
+                  title={
+                    acceptedConcepts.length
+                      ? 'Только запись MD на диск (без загрузки в БД)'
+                      : 'Нужен черновик из шага 1'
+                  }
+                >
+                  Записать MD
+                </button>
+              </div>
+
+              {/* Step 3 — apply */}
+              <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-950/25 p-2 min-w-[10rem]">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-300/90">
+                  3 · В БД
+                </div>
+                <p className="text-[10px] text-slate-500 leading-snug">load + vectors + validate</p>
+                <button
+                  onClick={handleApply}
+                  disabled={!!busy}
+                  className="px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                  title={
+                    acceptedConcepts.length
+                      ? 'MD (если есть) → БД → vectors → validate'
+                      : 'Без таблицы: load существующих MD → vectors → validate'
+                  }
+                >
+                  Применить
+                </button>
+              </div>
+
+              {concepts.length > 0 && (
+                <div className="flex flex-col gap-1.5 justify-end p-2">
+                  <button
+                    onClick={handleClearDraft}
+                    disabled={!!busy}
+                    className="px-3 py-1.5 rounded text-xs font-bold text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
+                    title="Сбросить локальный черновик"
+                  >
+                    Очистить черновик
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
+              {source && <span>источник: {source}</span>}
+              {draftSavedAt && concepts.length > 0 && (
+                <span className="text-emerald-500/80">
+                  черновик · {new Date(draftSavedAt).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
           </div>
 
           <p className="text-[11px] text-slate-500">
-            <b className="text-slate-400">Черновик</b> после Suggest хранится в браузере (localStorage, context=
-            {contextCode}) — закрытие диалога / F5 не требуют нового Suggest.{' '}
-            <b className="text-slate-400">Записать MD</b> — только файлы.{' '}
-            <b className="text-slate-400">Применить</b> — с отмеченными понятиями или без таблицы (уже лежащие MD).
+            <b className="text-slate-400">1</b> — один шаг «получить concepts» (встроенный LLM или внешний чат).{' '}
+            <b className="text-slate-400">2</b> — MD на диск.{' '}
+            <b className="text-slate-400">3</b> — load + vectors + validate. Черновик: localStorage (
+            {contextCode}). Промпты: System Settings → Ontology Builder.
           </p>
+
+          {/* BYO external LLM panel */}
+          {byoOpen && (
+            <div className="border border-violet-600/40 bg-slate-900/80 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-violet-200">
+                  Внешняя LLM (как кнопка Suggest)
+                </div>
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-white text-lg leading-none"
+                  onClick={() => setByoOpen(false)}
+                  title="Скрыть"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex gap-2 text-xs">
+                <button
+                  type="button"
+                  className={`px-2 py-1 rounded ${byoTab === 'export' ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  onClick={() => setByoTab('export')}
+                >
+                  1. Промпт
+                </button>
+                <button
+                  type="button"
+                  className={`px-2 py-1 rounded ${byoTab === 'import' ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  onClick={() => setByoTab('import')}
+                >
+                  2. Вставить ответ
+                </button>
+              </div>
+
+              {byoTab === 'export' && (
+                <div className="space-y-2 text-xs text-slate-300">
+                  <p className="text-slate-400">
+                    Собираем те же system/user, что ушёл бы во встроенный Suggest (якоря + settings).
+                    LLM на сервере <b>не</b> вызывается.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={!!busy}
+                      onClick={handleExportPrompt}
+                      className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white font-medium disabled:opacity-50"
+                    >
+                      {exportPack ? 'Обновить промпт' : 'Собрать промпт'}
+                    </button>
+                    {exportPack && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => copyText('combined', exportPack.combinedForChat)}
+                          className="px-2 py-1 rounded bg-emerald-800 hover:bg-emerald-700 text-white font-medium"
+                        >
+                          Копировать всё (chat)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyText('system', exportPack.systemPrompt)}
+                          className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
+                        >
+                          System
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyText('user', exportPack.userPrompt)}
+                          className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white"
+                        >
+                          User
+                        </button>
+                      </>
+                    )}
+                    {copyOk && copyOk !== 'fail' && (
+                      <span className="text-emerald-400 self-center">Скопировано: {copyOk}</span>
+                    )}
+                    {copyOk === 'fail' && (
+                      <span className="text-red-400 self-center">Clipboard недоступен — выделите вручную</span>
+                    )}
+                  </div>
+                  {exportPack && (
+                    <textarea
+                      readOnly
+                      value={exportPack.combinedForChat}
+                      rows={12}
+                      className="w-full bg-slate-950 border border-slate-600 rounded px-2 py-1.5 text-[11px] font-mono text-slate-200"
+                    />
+                  )}
+                </div>
+              )}
+
+              {byoTab === 'import' && (
+                <div className="space-y-2 text-xs text-slate-300">
+                  <p className="text-slate-400">
+                    Вставьте JSON <code className="text-slate-200">{'{"concepts":[...]}'}</code> из внешнего
+                    чата. Дальше — grounding/relations как после Suggest.
+                  </p>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    rows={10}
+                    placeholder='{"concepts":[{"id":"...","name":"...","rationale":"...","aspects":["domain"],"anchorFullNames":["..."]}]}'
+                    className="w-full bg-slate-950 border border-slate-600 rounded px-2 py-1.5 text-[11px] font-mono text-white"
+                  />
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={handleImportLlm}
+                    className="px-3 py-1.5 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    Импортировать как Suggest
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Result banner — always visible after action */}
           {banner && (

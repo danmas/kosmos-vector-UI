@@ -4,13 +4,14 @@ import { usePromptsConfig } from '../lib/hooks/usePromptsConfig';
 import { AppConfigTab } from './settings/AppConfigTab';
 import { PromptsConfigTab } from './settings/PromptsConfigTab';
 import TypesConfigTab from './settings/TypesConfigTab';
+import { OntologyBuilderConfigTab } from './settings/OntologyBuilderConfigTab';
 
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type TabId = 'app' | 'prompts' | 'types';
+type TabId = 'app' | 'prompts' | 'types' | 'ontology';
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<TabId>('app');
@@ -37,6 +38,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
   const tabs = [
     { id: 'app' as TabId, label: 'App Config', icon: '⚙️' },
     { id: 'prompts' as TabId, label: 'Prompts Config', icon: '🤖' },
+    { id: 'ontology' as TabId, label: 'Ontology Builder', icon: '🕸' },
     { id: 'types' as TabId, label: 'Item Types', icon: '📦' },
   ];
 
@@ -101,6 +103,17 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
               validationErrors={promptsConfig.validationErrors}
               onSave={promptsConfig.updateConfig}
               onReset={promptsConfig.resetConfig}
+            />
+          )}
+
+          {activeTab === 'ontology' && (
+            <OntologyBuilderConfigTab
+              config={appConfig.config}
+              factoryOntologyBuilder={appConfig.factoryOntologyBuilder}
+              loading={appConfig.loading}
+              error={appConfig.error}
+              validationErrors={appConfig.validationErrors}
+              onSave={appConfig.updateConfig}
             />
           )}
           

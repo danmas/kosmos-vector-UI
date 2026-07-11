@@ -71,6 +71,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           AiItem Architect
         </h1>
         <p className="text-[10px] text-slate-500 mt-0.5">Codebase RAG System</p>
+        <p
+          className="text-[10px] font-semibold mt-1.5 tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-300"
+          title="LLM failure stops the operation — no silent fallback without AI"
+        >
+          «Без ИИ жизни нет!»
+        </p>
       </div>
       
       <div className="p-3 border-t border-slate-700 space-y-2">

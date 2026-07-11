@@ -56,6 +56,10 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
         if (s6?.builderStatus) {
           setBuilderStatus(s6.builderStatus as OntologyBuilderStatus);
         }
+        // Side effects (invalidate/prefetch) MUST NOT run inside setState updater
+        let shouldRefreshCache = false;
+        let completedLabels: string[] = [];
+
         setSteps(prevSteps => {
           // If server returned new step ids (e.g. Step 6) missing from local state, merge
           const knownIds = new Set(prevSteps.map(p => p.id));
@@ -108,26 +112,32 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
             return prevStep;
           });
 
-          // Проверяем, какие шаги перешли из processing в completed
+          // Detect processing → completed (for cache refresh after setState)
           const previousSteps = prevStepsRef.current;
           newSteps.forEach((newStep, index) => {
             const prevStep = previousSteps[index];
             if (prevStep && prevStep.status === 'processing' && newStep.status === 'completed') {
-              // Шаг завершился - обновляем кэш данных
-              console.log(`[PipelineView] Step ${newStep.id} (${newStep.label}) completed, invalidating cache...`);
-              invalidate();
-              // Автоматически перезагружаем данные
-              prefetchAll().catch(err => {
-                console.warn('[PipelineView] Failed to prefetch data after step completion:', err);
-              });
+              shouldRefreshCache = true;
+              completedLabels.push(`${newStep.id} (${newStep.label})`);
             }
           });
 
-          // Обновляем ref с новыми статусами
           prevStepsRef.current = newSteps;
-
           return newSteps;
         });
+
+        if (shouldRefreshCache) {
+          completedLabels.forEach((label) => {
+            console.log(`[PipelineView] Step ${label} completed, invalidating cache...`);
+          });
+          // Defer so we are not inside render / setState of PipelineView
+          queueMicrotask(() => {
+            invalidate();
+            prefetchAll().catch(err => {
+              console.warn('[PipelineView] Failed to prefetch data after step completion:', err);
+            });
+          });
+        }
       }
     } catch (error) {
       // Если API недоступен, используем локальное состояние

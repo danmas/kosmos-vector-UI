@@ -575,12 +575,39 @@ export interface OntologyBuildSuggestResponse {
   depth: OntologyBuildDepth;
   maxConcepts: number;
   source: string;
+  model?: string | null;
   suggestedAt: string;
   concepts: OntologyConceptCandidate[];
   meta?: {
     anchorsConsidered?: number;
     seedExcluded?: number;
+    importedConceptsRaw?: number;
+    importedConceptsAccepted?: number;
   };
+}
+
+/** Export prompts for external / BYO LLM chat */
+export interface OntologyBuildExportPromptResponse {
+  contextCode: string;
+  systemPrompt: string;
+  userPrompt: string;
+  combinedForChat: string;
+  modelHint?: string | null;
+  maxConcepts: number;
+  anchorsInPrompt: number;
+  tablesInPrompt?: number;
+  seedMode?: string;
+  seedAvoidCount?: number;
+  existingConceptsListed?: number;
+  seedExcluded: number;
+  howTo: string[];
+  exportedAt: string;
+}
+
+/** Import pasted LLM JSON as if Suggest ran */
+export interface OntologyBuildImportRequest extends OntologyBuildSuggestRequest {
+  text: string;
+  runDescriptionPass?: boolean;
 }
 
 export interface OntologyBuildMaterializeRequest {
@@ -790,6 +817,29 @@ export interface CompareStrategiesResponse {
 
 // ────────────────────────────────────── App Config Types (v2.8.0)
 
+/** Ontology Builder (Step 6) settings — config.json.ontology_builder */
+export interface OntologyBuilderConfig {
+  model?: string | null;
+  maxConcepts?: number;
+  depth?: 'concepts' | 'concepts+grounding';
+  temperature?: number;
+  systemPrompt?: string;
+  userPromptTemplate?: string;
+  descriptionSystemPrompt?: string;
+  descriptionPrompt?: string;
+  /** Appended to every suggest/export user message */
+  outputRulesSuffix?: string;
+  /** Retry after truncated JSON */
+  retrySystemPrompt?: string;
+  retryUserTemplate?: string;
+  /** BYO chat footer instruction */
+  byoInstruction?: string;
+  excludeNamePatterns?: string[];
+  enableDescriptionPass?: boolean;
+  /** user-only: seed = UI seeds only (default). all-existing: dump every concept id (legacy). */
+  seedMode?: 'user-only' | 'all-existing';
+}
+
 export interface AppConfig {
   KOSMOS_BASE_URL: string;           // URL формат
   KOSMOS_MODEL: string;              // Строка модели
@@ -798,11 +848,16 @@ export interface AppConfig {
   NATURAL_QUERY_SUGGEST_LIMIT: number;        // 1-100
   NATURAL_QUERY_SIMILARITY_THRESHOLD: number;  // 0-1
   NATURAL_QUERY_AUTO_USE_THRESHOLD: number;    // 0-1
+  ontology_builder?: OntologyBuilderConfig;
 }
 
 export interface AppConfigResponse {
   success: true;
   config: AppConfig;
+  /** Factory defaults (e.g. full ontology_builder prompts for Reset in Settings) */
+  factory?: {
+    ontology_builder?: OntologyBuilderConfig;
+  };
 }
 
 export interface AppConfigUpdateRequest {
@@ -813,6 +868,7 @@ export interface AppConfigUpdateRequest {
   NATURAL_QUERY_SUGGEST_LIMIT?: number;
   NATURAL_QUERY_SIMILARITY_THRESHOLD?: number;
   NATURAL_QUERY_AUTO_USE_THRESHOLD?: number;
+  ontology_builder?: OntologyBuilderConfig;
 }
 
 export interface AppConfigUpdateResponse {

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AppConfig, AppConfigUpdateRequest } from '../../types';
+import { AppConfig, AppConfigUpdateRequest, OntologyBuilderConfig } from '../../types';
 import { apiClient } from '../../services/apiClient';
 
 interface UseAppConfigReturn {
   config: AppConfig | null;
+  /** Factory ontology_builder (full default prompts) from GET /api/config */
+  factoryOntologyBuilder: OntologyBuilderConfig | null;
   loading: boolean;
   error: string | null;
   validationErrors: string[];
@@ -18,6 +20,8 @@ interface UseAppConfigReturn {
  */
 export function useAppConfig(): UseAppConfigReturn {
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [factoryOntologyBuilder, setFactoryOntologyBuilder] =
+    useState<OntologyBuilderConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -32,6 +36,9 @@ export function useAppConfig(): UseAppConfigReturn {
       
       if (response.success) {
         setConfig(response.config);
+        if (response.factory?.ontology_builder) {
+          setFactoryOntologyBuilder(response.factory.ontology_builder);
+        }
       } else {
         setError('Failed to load configuration');
       }
@@ -105,6 +112,7 @@ export function useAppConfig(): UseAppConfigReturn {
 
   return {
     config,
+    factoryOntologyBuilder,
     loading,
     error,
     validationErrors,

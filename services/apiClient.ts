@@ -921,6 +921,38 @@ export class ApiClient {
   }
 
   /**
+   * POST /api/ontology/build/suggest/export-prompt — prompts for external LLM (no model call)
+   */
+  async ontologyBuildExportPrompt(
+    request: import('../types').OntologyBuildSuggestRequest = {}
+  ): Promise<import('../types').OntologyBuildExportPromptResponse> {
+    return this.request<import('../types').OntologyBuildExportPromptResponse>(
+      '/api/ontology/build/suggest/export-prompt',
+      {
+        method: 'POST',
+        body: JSON.stringify(request),
+        contextCode: request.contextCode,
+      }
+    );
+  }
+
+  /**
+   * POST /api/ontology/build/suggest/import — paste external LLM JSON as if Suggest ran
+   */
+  async ontologyBuildImport(
+    request: import('../types').OntologyBuildImportRequest
+  ): Promise<import('../types').OntologyBuildSuggestResponse> {
+    return this.request<import('../types').OntologyBuildSuggestResponse>(
+      '/api/ontology/build/suggest/import',
+      {
+        method: 'POST',
+        body: JSON.stringify(request),
+        contextCode: request.contextCode,
+      }
+    );
+  }
+
+  /**
    * POST /api/ontology/build/materialize — write concepts/*.md (status: draft)
    */
   async ontologyBuildMaterialize(

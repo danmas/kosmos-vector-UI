@@ -271,6 +271,62 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
     });
   };
 
+  const handleClearOntology = async () => {
+    const cc = getUiContextCode();
+    const ok = window.confirm(
+      `Очистить онтологию для context-code «${cc}»?\n\n` +
+        `• БД: ai_item type=concept, onto_* links, concept-chunks\n` +
+        `• Диск: *.md в onto_loading.dirs\n` +
+        `• UI-черновик suggest\n\n` +
+        `Код/таблицы/не-concept items НЕ удаляются.\n` +
+        `Действие необратимо.`
+    );
+    if (!ok) return;
+
+    setBusy('apply');
+    setBanner(null);
+    try {
+      const report = await apiClient.ontologyClear({
+        confirm: true,
+        deleteDb: true,
+        deleteFiles: true,
+        dryRun: false,
+      });
+      clearDraft(cc);
+      lastDraftJsonRef.current = '';
+      skipNextAutosaveRef.current = true;
+      setConcepts([]);
+      setSource(null);
+      setDraftSavedAt(null);
+      setMaterializeResult(null);
+      setApplyResult(null);
+      setExportPack(null);
+      setImportText('');
+      setBanner({
+        kind: 'success',
+        title: 'Онтология очищена',
+        lines: [
+          `Контекст: ${report.contextCode}`,
+          `Concepts в БД удалено: ${report.aiItemsDeleted} (было ${report.conceptsFound})`,
+          `Links (onto/concept): ${report.linksDeleted}`,
+          `Chunks: ${report.chunksDeleted}`,
+          `MD-файлов: ${report.mdFilesDeleted?.length || 0}` +
+            (report.dirs?.length ? ` · dirs: ${report.dirs.join('; ')}` : ''),
+          report.warnings?.length ? `Предупреждения: ${report.warnings.join('; ')}` : '',
+          'Можно собирать с нуля: Suggest / Внешняя LLM → MD → Apply.',
+        ].filter(Boolean),
+      });
+    } catch (e: any) {
+      setBanner({
+        kind: 'error',
+        title: 'Очистка онтологии не удалась',
+        lines: [errMessage(e)],
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!isOpen) return null;
 
   const parseSeed = () =>
@@ -858,18 +914,26 @@ const OntologyBuilderDialog: React.FC<OntologyBuilderDialogProps> = ({
                 </button>
               </div>
 
-              {concepts.length > 0 && (
-                <div className="flex flex-col gap-1.5 justify-end p-2">
+              <div className="flex flex-col gap-1.5 justify-end p-2 min-w-[9rem]">
+                {concepts.length > 0 && (
                   <button
                     onClick={handleClearDraft}
                     disabled={!!busy}
                     className="px-3 py-1.5 rounded text-xs font-bold text-slate-200 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
-                    title="Сбросить локальный черновик"
+                    title="Сбросить только localStorage-черновик UI"
                   >
-                    Очистить черновик
+                    Очистить черновик UI
                   </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={handleClearOntology}
+                  disabled={!!busy}
+                  className="px-3 py-1.5 rounded text-xs font-bold text-red-100 bg-red-900/80 hover:bg-red-800 border border-red-600/50 disabled:opacity-50"
+                  title="Удалить concept:* из БД + onto-links + MD в onto_loading.dirs (реальность кода не трогает)"
+                >
+                  Очистить онтологию…
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
               {source && <span>источник: {source}</span>}

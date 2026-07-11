@@ -610,6 +610,26 @@ export interface OntologyBuildImportRequest extends OntologyBuildSuggestRequest 
   runDescriptionPass?: boolean;
 }
 
+/** POST /api/ontology/clear */
+export interface OntologyClearResponse {
+  contextCode: string;
+  dryRun: boolean;
+  deleteDb: boolean;
+  deleteFiles: boolean;
+  conceptsFound: number;
+  conceptIds: string[];
+  linksDeleted: number;
+  chunksDeleted: number;
+  aiItemsDeleted: number;
+  filesDeletedDb: number;
+  mdFilesDeleted: string[];
+  mdFilesSkipped: string[];
+  dirs: string[];
+  warnings: string[];
+  clearedAt?: string;
+  success: boolean;
+}
+
 export interface OntologyBuildMaterializeRequest {
   concepts: OntologyConceptCandidate[];
   overwrite?: boolean;

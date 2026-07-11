@@ -953,6 +953,28 @@ export class ApiClient {
   }
 
   /**
+   * POST /api/ontology/clear — wipe ontology (concepts + onto links + MD) for context
+   */
+  async ontologyClear(request: {
+    confirm: boolean;
+    deleteDb?: boolean;
+    deleteFiles?: boolean;
+    dryRun?: boolean;
+    contextCode?: string;
+  }): Promise<import('../types').OntologyClearResponse> {
+    return this.request<import('../types').OntologyClearResponse>('/api/ontology/clear', {
+      method: 'POST',
+      body: JSON.stringify({
+        confirm: request.confirm,
+        deleteDb: request.deleteDb,
+        deleteFiles: request.deleteFiles,
+        dryRun: request.dryRun,
+      }),
+      contextCode: request.contextCode,
+    });
+  }
+
+  /**
    * POST /api/ontology/build/materialize — write concepts/*.md (status: draft)
    */
   async ontologyBuildMaterialize(

@@ -459,7 +459,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
                 2. <span className="text-blue-400 font-bold">Step 1 → Step 2:</span> загрузчики создают AI Items и L0-чанки, затем резолвятся L1-зависимости и строится граф связей (calls, reads from, updates...).
               </p>
               <p>
-                3. <span className="text-blue-400 font-bold">Embedding (Step 4):</span> текст чанка отправляется в модель эмбеддингов (OpenAI при USE_OPENAI=true, иначе SimpleEmbeddings) — получается вектор 1536.
+                3. <span className="text-blue-400 font-bold">Embedding (Step 4):</span> текст чанка векторизуется локальной моделью (local-inproc) или через OpenAI (если EMBEDDINGS_PROVIDER=openai). Размерность зависит от модели (1024 для MLE5Large, 384 для multilingual-e5-small). Scope управляется настройкой Vectorize Scope.
               </p>
               <p>
                 4. <span className="text-blue-400 font-bold">Storage:</span> вектора хранятся в PostgreSQL (pgvector, таблица kosmos.chunk_vector), поиск — косинусная близость с ivfflat-индексом.
@@ -486,6 +486,18 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
                   <option value="text-embedding-004">Google Gemini (text-embedding-004)</option>
                   <option value="text-embedding-3-small">OpenAI (text-embedding-3-small)</option>
                   <option value="local">Local (SentenceTransformers)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 uppercase mb-0.5">Vectorize Scope</label>
+                <select
+                  value={contextConfig?.vectorization?.vectorizeScope || 'concepts+docs'}
+                  onChange={(e) => updateContextConfig('vectorization', { vectorizeScope: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white h-7 focus:border-blue-500 outline-none"
+                >
+                  <option value="concepts">Concepts only (ontology-first)</option>
+                  <option value="concepts+docs">Concepts + Docs</option>
+                  <option value="all">All (legacy full-corpus)</option>
                 </select>
               </div>
               <div>

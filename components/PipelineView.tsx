@@ -46,16 +46,16 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
   // Ref для отслеживания предыдущих статусов шагов (чтобы определить переход в completed)
   const prevStepsRef = useRef<PipelineStep[]>(steps);
 
+  const refreshBuilderStatus = () => {
+    apiClient.ontologyBuildStatus().then(bs => setBuilderStatus(bs)).catch(() => {});
+  };
+
   // Загрузка статуса шагов с сервера
   const fetchStepsStatus = async () => {
     try {
       const response = await apiClient.getPipelineStepsStatus();
       if (response.success && response.steps) {
         const serverSteps = response.steps;
-        const s6 = serverSteps.find((s: any) => s.id === 6);
-        if (s6?.builderStatus) {
-          setBuilderStatus(s6.builderStatus as OntologyBuilderStatus);
-        }
         // Side effects (invalidate/prefetch) MUST NOT run inside setState updater
         let shouldRefreshCache = false;
         let completedLabels: string[] = [];
@@ -191,6 +191,12 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
     fetchStepsStatus(); // Загружаем сразу
     const interval = setInterval(fetchStepsStatus, 2000); // Обновляем каждые 2 секунды
     return () => clearInterval(interval);
+  }, []);
+
+  // Step 6 builder status — fetch once on mount, then on-demand only.
+  // Not auto-polled to avoid unnecessary DB queries during heavy operations.
+  useEffect(() => {
+    refreshBuilderStatus();
   }, []);
 
   const updateContextConfig = async (stepName: string, updates: any) => {
@@ -516,6 +522,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ onOpenLogs }) => {
         onClose={() => {
           setShowOntologyBuilder(false);
           fetchStepsStatus();
+          refreshBuilderStatus();
         }}
       />
 
